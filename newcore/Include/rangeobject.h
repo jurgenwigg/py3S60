@@ -1,4 +1,4 @@
-/* Portions Copyright (c) 2008 Nokia Corporation */
+
 /* Range object interface */
 
 #ifndef Py_RANGEOBJECT_H
@@ -6,9 +6,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* This is about the type 'xrange', not the built-in function range(), which
-   returns regular lists. */
 
 /*
 A range object represents an integer range.  This is an immutable object;
@@ -18,9 +15,11 @@ Range objects behave like the corresponding tuple objects except that
 they are represented by a start, stop, and step datamembers.
 */
 
-PyAPI_DATA(PyTypeObject, PyRange_Type);
+PyAPI_DATA(PyTypeObject) PyRange_Type;
+PyAPI_DATA(PyTypeObject) PyRangeIter_Type;
+PyAPI_DATA(PyTypeObject) PyLongRangeIter_Type;
 
-#define PyRange_Check(op) ((op)->ob_type == &PyRange_Type)
+#define PyRange_Check(op) Py_IS_TYPE(op, &PyRange_Type)
 
 #ifdef __cplusplus
 }

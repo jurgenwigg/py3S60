@@ -1,6 +1,6 @@
 /* cursor.h - definitions for the cursor type
  *
- * Copyright (C) 2004-2006 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2004-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -23,6 +23,7 @@
 
 #ifndef PYSQLITE_CURSOR_H
 #define PYSQLITE_CURSOR_H
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
 #include "statement.h"
@@ -32,40 +33,28 @@
 typedef struct
 {
     PyObject_HEAD
-    Connection* connection;
+    pysqlite_Connection* connection;
     PyObject* description;
     PyObject* row_cast_map;
     int arraysize;
     PyObject* lastrowid;
-    PyObject* rowcount;
+    long rowcount;
     PyObject* row_factory;
-    Statement* statement;
+    pysqlite_Statement* statement;
+    int closed;
+    int reset;
+    int locked;
+    int initialized;
 
     /* the next row to be returned, NULL if no next row available */
     PyObject* next_row;
-} Cursor;
 
-typedef enum {
-    STATEMENT_INVALID, STATEMENT_INSERT, STATEMENT_DELETE,
-    STATEMENT_UPDATE, STATEMENT_REPLACE, STATEMENT_SELECT,
-    STATEMENT_OTHER
-} StatementKind;
+    PyObject* in_weakreflist; /* List of weak references */
+} pysqlite_Cursor;
 
-extern PyTypeObject CursorType;
+extern PyTypeObject *pysqlite_CursorType;
 
-int cursor_init(Cursor* self, PyObject* args, PyObject* kwargs);
-void cursor_dealloc(Cursor* self);
-PyObject* cursor_execute(Cursor* self, PyObject* args);
-PyObject* cursor_executemany(Cursor* self, PyObject* args);
-PyObject* cursor_getiter(Cursor *self);
-PyObject* cursor_iternext(Cursor *self);
-PyObject* cursor_fetchone(Cursor* self, PyObject* args);
-PyObject* cursor_fetchmany(Cursor* self, PyObject* args);
-PyObject* cursor_fetchall(Cursor* self, PyObject* args);
-PyObject* pysqlite_noop(Connection* self, PyObject* args);
-PyObject* cursor_close(Cursor* self, PyObject* args);
-
-int cursor_setup_types(void);
+int pysqlite_cursor_setup_types(PyObject *module);
 
 #define UNKNOWN (-1)
 #endif

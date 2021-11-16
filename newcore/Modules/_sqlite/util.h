@@ -1,6 +1,6 @@
 /* util.h - various utility functions
  *
- * Copyright (C) 2005-2006 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -23,16 +23,20 @@
 
 #ifndef PYSQLITE_UTIL_H
 #define PYSQLITE_UTIL_H
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pythread.h"
 #include "sqlite3.h"
 #include "connection.h"
 
-int _sqlite_step_with_busyhandler(sqlite3_stmt* statement, Connection* connection);
+int pysqlite_step(sqlite3_stmt* statement, pysqlite_Connection* connection);
 
 /**
  * Checks the SQLite error code and sets the appropriate DB-API exception.
  * Returns the error code (0 means no error occurred).
  */
-int _seterror(sqlite3* db);
+int _pysqlite_seterror(sqlite3* db, sqlite3_stmt* st);
+
+sqlite_int64 _pysqlite_long_as_int64(PyObject * value);
+
 #endif

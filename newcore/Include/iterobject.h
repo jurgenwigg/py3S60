@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2008 Nokia Corporation */
 #ifndef Py_ITEROBJECT_H
 #define Py_ITEROBJECT_H
 /* Iterators (the basic kind, over a sequence) */
@@ -6,17 +5,21 @@
 extern "C" {
 #endif
 
-PyAPI_DATA(PyTypeObject, PySeqIter_Type);
+PyAPI_DATA(PyTypeObject) PySeqIter_Type;
+PyAPI_DATA(PyTypeObject) PyCallIter_Type;
+#ifdef Py_BUILD_CORE
+extern PyTypeObject _PyAnextAwaitable_Type;
+#endif
 
-#define PySeqIter_Check(op) ((op)->ob_type == &PySeqIter_Type)
+#define PySeqIter_Check(op) Py_IS_TYPE(op, &PySeqIter_Type)
 
 PyAPI_FUNC(PyObject *) PySeqIter_New(PyObject *);
 
-PyAPI_DATA(PyTypeObject, PyCallIter_Type);
 
-#define PyCallIter_Check(op) ((op)->ob_type == &PyCallIter_Type)
+#define PyCallIter_Check(op) Py_IS_TYPE(op, &PyCallIter_Type)
 
 PyAPI_FUNC(PyObject *) PyCallIter_New(PyObject *, PyObject *);
+
 #ifdef __cplusplus
 }
 #endif

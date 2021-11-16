@@ -1,51 +1,324 @@
 /* Frame object implementation */
 
 #include "Python.h"
+#include "pycore_ceval.h"         // _PyEval_BuiltinsFromGlobals()
+#include "pycore_moduleobject.h"  // _PyModule_GetDict()
+#include "pycore_object.h"        // _PyObject_GC_UNTRACK()
 
-#include "code.h"
-#include "frameobject.h"
-#include "opcode.h"
-#include "structmember.h"
-
-#undef MIN
-#undef MAX
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#include "frameobject.h"          // PyFrameObject
+#include "opcode.h"               // EXTENDED_ARG
+#include "structmember.h"         // PyMemberDef
 
 #define OFF(x) offsetof(PyFrameObject, x)
 
 static PyMemberDef frame_memberlist[] = {
-	{"f_back",	T_OBJECT,	OFF(f_back),	RO},
-	{"f_code",	T_OBJECT,	OFF(f_code),	RO},
-	{"f_builtins",	T_OBJECT,	OFF(f_builtins),RO},
-	{"f_globals",	T_OBJECT,	OFF(f_globals),	RO},
-	{"f_lasti",	T_INT,		OFF(f_lasti),	RO},
-	{"f_exc_type",	T_OBJECT,	OFF(f_exc_type)},
-	{"f_exc_value",	T_OBJECT,	OFF(f_exc_value)},
-	{"f_exc_traceback", T_OBJECT,	OFF(f_exc_traceback)},
-	{NULL}	/* Sentinel */
+    {"f_back",          T_OBJECT,       OFF(f_back),      READONLY},
+    {"f_code",          T_OBJECT,       OFF(f_code),      READONLY|PY_AUDIT_READ},
+    {"f_builtins",      T_OBJECT,       OFF(f_builtins),  READONLY},
+    {"f_globals",       T_OBJECT,       OFF(f_globals),   READONLY},
+    {"f_trace_lines",   T_BOOL,         OFF(f_trace_lines), 0},
+    {"f_trace_opcodes", T_BOOL,         OFF(f_trace_opcodes), 0},
+    {NULL}      /* Sentinel */
 };
+
+static struct _Py_frame_state *
+get_frame_state(void)
+{
+    PyInterpreterState *interp = _PyInterpreterState_GET();
+    return &interp->frame;
+}
+
 
 static PyObject *
 frame_getlocals(PyFrameObject *f, void *closure)
 {
-	PyFrame_FastToLocals(f);
-	Py_INCREF(f->f_locals);
-	return f->f_locals;
+    if (PyFrame_FastToLocalsWithError(f) < 0)
+        return NULL;
+    Py_INCREF(f->f_locals);
+    return f->f_locals;
+}
+
+int
+PyFrame_GetLineNumber(PyFrameObject *f)
+{
+    assert(f != NULL);
+    if (f->f_lineno != 0) {
+        return f->f_lineno;
+    }
+    else {
+        return PyCode_Addr2Line(f->f_code, f->f_lasti*sizeof(_Py_CODEUNIT));
+    }
 }
 
 static PyObject *
 frame_getlineno(PyFrameObject *f, void *closure)
 {
-	int lineno;
-
-	if (f->f_trace)
-		lineno = f->f_lineno;
-	else
-		lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
-	return PyInt_FromLong(lineno);
+    int lineno = PyFrame_GetLineNumber(f);
+    if (lineno < 0) {
+        Py_RETURN_NONE;
+    }
+    else {
+        return PyLong_FromLong(lineno);
+    }
 }
+
+static PyObject *
+frame_getlasti(PyFrameObject *f, void *closure)
+{
+    if (f->f_lasti < 0) {
+        return PyLong_FromLong(-1);
+    }
+    return PyLong_FromLong(f->f_lasti*sizeof(_Py_CODEUNIT));
+}
+
+
+/* Given the index of the effective opcode,
+   scan back to construct the oparg with EXTENDED_ARG */
+static unsigned int
+get_arg(const _Py_CODEUNIT *codestr, Py_ssize_t i)
+{
+    _Py_CODEUNIT word;
+    unsigned int oparg = _Py_OPARG(codestr[i]);
+    if (i >= 1 && _Py_OPCODE(word = codestr[i-1]) == EXTENDED_ARG) {
+        oparg |= _Py_OPARG(word) << 8;
+        if (i >= 2 && _Py_OPCODE(word = codestr[i-2]) == EXTENDED_ARG) {
+            oparg |= _Py_OPARG(word) << 16;
+            if (i >= 3 && _Py_OPCODE(word = codestr[i-3]) == EXTENDED_ARG) {
+                oparg |= _Py_OPARG(word) << 24;
+            }
+        }
+    }
+    return oparg;
+}
+
+typedef enum kind {
+    With = 1,
+    Loop = 2,
+    Try = 3,
+    Except = 4,
+} Kind;
+
+#define BITS_PER_BLOCK 3
+
+static inline int64_t
+push_block(int64_t stack, Kind kind)
+{
+    assert(stack < ((int64_t)1)<<(BITS_PER_BLOCK*CO_MAXBLOCKS));
+    return (stack << BITS_PER_BLOCK) | kind;
+}
+
+static inline int64_t
+pop_block(int64_t stack)
+{
+    assert(stack > 0);
+    return stack >> BITS_PER_BLOCK;
+}
+
+static inline Kind
+top_block(int64_t stack)
+{
+    return stack & ((1<<BITS_PER_BLOCK)-1);
+}
+
+static int64_t *
+markblocks(PyCodeObject *code_obj, int len)
+{
+    const _Py_CODEUNIT *code =
+        (const _Py_CODEUNIT *)PyBytes_AS_STRING(code_obj->co_code);
+    int64_t *blocks = PyMem_New(int64_t, len+1);
+    int i, j, opcode;
+
+    if (blocks == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+    memset(blocks, -1, (len+1)*sizeof(int64_t));
+    blocks[0] = 0;
+    int todo = 1;
+    while (todo) {
+        todo = 0;
+        for (i = 0; i < len; i++) {
+            int64_t block_stack = blocks[i];
+            int64_t except_stack;
+            if (block_stack == -1) {
+                continue;
+            }
+            opcode = _Py_OPCODE(code[i]);
+            switch (opcode) {
+                case JUMP_IF_FALSE_OR_POP:
+                case JUMP_IF_TRUE_OR_POP:
+                case POP_JUMP_IF_FALSE:
+                case POP_JUMP_IF_TRUE:
+                case JUMP_IF_NOT_EXC_MATCH:
+                    j = get_arg(code, i);
+                    assert(j < len);
+                    if (blocks[j] == -1 && j < i) {
+                        todo = 1;
+                    }
+                    assert(blocks[j] == -1 || blocks[j] == block_stack);
+                    blocks[j] = block_stack;
+                    blocks[i+1] = block_stack;
+                    break;
+                case JUMP_ABSOLUTE:
+                    j = get_arg(code, i);
+                    assert(j < len);
+                    if (blocks[j] == -1 && j < i) {
+                        todo = 1;
+                    }
+                    assert(blocks[j] == -1 || blocks[j] == block_stack);
+                    blocks[j] = block_stack;
+                    break;
+                case SETUP_FINALLY:
+                    j = get_arg(code, i) + i + 1;
+                    assert(j < len);
+                    except_stack = push_block(block_stack, Except);
+                    assert(blocks[j] == -1 || blocks[j] == except_stack);
+                    blocks[j] = except_stack;
+                    block_stack = push_block(block_stack, Try);
+                    blocks[i+1] = block_stack;
+                    break;
+                case SETUP_WITH:
+                case SETUP_ASYNC_WITH:
+                    j = get_arg(code, i) + i + 1;
+                    assert(j < len);
+                    except_stack = push_block(block_stack, Except);
+                    assert(blocks[j] == -1 || blocks[j] == except_stack);
+                    blocks[j] = except_stack;
+                    block_stack = push_block(block_stack, With);
+                    blocks[i+1] = block_stack;
+                    break;
+                case JUMP_FORWARD:
+                    j = get_arg(code, i) + i + 1;
+                    assert(j < len);
+                    assert(blocks[j] == -1 || blocks[j] == block_stack);
+                    blocks[j] = block_stack;
+                    break;
+                case GET_ITER:
+                case GET_AITER:
+                    block_stack = push_block(block_stack, Loop);
+                    blocks[i+1] = block_stack;
+                    break;
+                case FOR_ITER:
+                    blocks[i+1] = block_stack;
+                    block_stack = pop_block(block_stack);
+                    j = get_arg(code, i) + i + 1;
+                    assert(j < len);
+                    assert(blocks[j] == -1 || blocks[j] == block_stack);
+                    blocks[j] = block_stack;
+                    break;
+                case POP_BLOCK:
+                case POP_EXCEPT:
+                    block_stack = pop_block(block_stack);
+                    blocks[i+1] = block_stack;
+                    break;
+                case END_ASYNC_FOR:
+                    block_stack = pop_block(pop_block(block_stack));
+                    blocks[i+1] = block_stack;
+                    break;
+                case RETURN_VALUE:
+                case RAISE_VARARGS:
+                case RERAISE:
+                    /* End of block */
+                    break;
+                default:
+                    blocks[i+1] = block_stack;
+
+            }
+        }
+    }
+    return blocks;
+}
+
+static int
+compatible_block_stack(int64_t from_stack, int64_t to_stack)
+{
+    if (to_stack < 0) {
+        return 0;
+    }
+    while(from_stack > to_stack) {
+        from_stack = pop_block(from_stack);
+    }
+    return from_stack == to_stack;
+}
+
+static const char *
+explain_incompatible_block_stack(int64_t to_stack)
+{
+    Kind target_kind = top_block(to_stack);
+    switch(target_kind) {
+        case Except:
+            return "can't jump into an 'except' block as there's no exception";
+        case Try:
+            return "can't jump into the body of a try statement";
+        case With:
+            return "can't jump into the body of a with statement";
+        case Loop:
+            return "can't jump into the body of a for loop";
+        default:
+            Py_UNREACHABLE();
+    }
+}
+
+static int *
+marklines(PyCodeObject *code, int len)
+{
+    PyCodeAddressRange bounds;
+    _PyCode_InitAddressRange(code, &bounds);
+    assert (bounds.ar_end == 0);
+
+    int *linestarts = PyMem_New(int, len);
+    if (linestarts == NULL) {
+        return NULL;
+    }
+    for (int i = 0; i < len; i++) {
+        linestarts[i] = -1;
+    }
+
+    while (PyLineTable_NextAddressRange(&bounds)) {
+        assert(bounds.ar_start/(int)sizeof(_Py_CODEUNIT) < len);
+        linestarts[bounds.ar_start/sizeof(_Py_CODEUNIT)] = bounds.ar_line;
+    }
+    return linestarts;
+}
+
+static int
+first_line_not_before(int *lines, int len, int line)
+{
+    int result = INT_MAX;
+    for (int i = 0; i < len; i++) {
+        if (lines[i] < result && lines[i] >= line) {
+            result = lines[i];
+        }
+    }
+    if (result == INT_MAX) {
+        return -1;
+    }
+    return result;
+}
+
+static void
+frame_stack_pop(PyFrameObject *f)
+{
+    assert(f->f_stackdepth >= 0);
+    f->f_stackdepth--;
+    PyObject *v = f->f_valuestack[f->f_stackdepth];
+    Py_DECREF(v);
+}
+
+static void
+frame_block_unwind(PyFrameObject *f)
+{
+    assert(f->f_stackdepth >= 0);
+    assert(f->f_iblock > 0);
+    f->f_iblock--;
+    PyTryBlock *b = &f->f_blockstack[f->f_iblock];
+    intptr_t delta = f->f_stackdepth - b->b_level;
+    while (delta > 0) {
+        frame_stack_pop(f);
+        delta--;
+    }
+}
+
 
 /* Setter for f_lineno - you can set f_lineno from within a trace function in
  * order to jump to a given line of code, subject to some restrictions.  Most
@@ -57,302 +330,204 @@ frame_getlineno(PyFrameObject *f, void *closure)
  *  o Lines with an 'except' statement on them can't be jumped to, because
  *    they expect an exception to be on the top of the stack.
  *  o Lines that live in a 'finally' block can't be jumped from or to, since
- *    the END_FINALLY expects to clean up the stack after the 'try' block.
- *  o 'try'/'for'/'while' blocks can't be jumped into because the blockstack
- *    needs to be set up before their code runs, and for 'for' loops the
+ *    we cannot be sure which state the interpreter was in or would be in
+ *    during execution of the finally block.
+ *  o 'try', 'with' and 'async with' blocks can't be jumped into because
+ *    the blockstack needs to be set up before their code runs.
+ *  o 'for' and 'async for' loops can't be jumped into because the
  *    iterator needs to be on the stack.
+ *  o Jumps cannot be made from within a trace function invoked with a
+ *    'return' or 'exception' event since the eval loop has been exited at
+ *    that time.
  */
 static int
-frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
+frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno, void *Py_UNUSED(ignored))
 {
-	int new_lineno = 0;		/* The new value of f_lineno */
-	int new_lasti = 0;		/* The new value of f_lasti */
-	int new_iblock = 0;		/* The new value of f_iblock */
-	char *code = NULL;		/* The bytecode for the frame... */
-	Py_ssize_t code_len = 0;	/* ...and its length */
-	char *lnotab = NULL;		/* Iterating over co_lnotab */
-	Py_ssize_t lnotab_len = 0;	/* (ditto) */
-	int offset = 0;			/* (ditto) */
-	int line = 0;			/* (ditto) */
-	int addr = 0;			/* (ditto) */
-	int min_addr = 0;		/* Scanning the SETUPs and POPs */
-	int max_addr = 0;		/* (ditto) */
-	int delta_iblock = 0;		/* (ditto) */
-	int min_delta_iblock = 0;	/* (ditto) */
-	int min_iblock = 0;		/* (ditto) */
-	int f_lasti_setup_addr = 0;	/* Policing no-jump-into-finally */
-	int new_lasti_setup_addr = 0;	/* (ditto) */
-	int blockstack[CO_MAXBLOCKS];	/* Walking the 'finally' blocks */
-	int in_finally[CO_MAXBLOCKS];	/* (ditto) */
-	int blockstack_top = 0;		/* (ditto) */
-	int setup_op = 0;               /* (ditto) */
+    if (p_new_lineno == NULL) {
+        PyErr_SetString(PyExc_AttributeError, "cannot delete attribute");
+        return -1;
+    }
+    /* f_lineno must be an integer. */
+    if (!PyLong_CheckExact(p_new_lineno)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "lineno must be an integer");
+        return -1;
+    }
 
-	/* f_lineno must be an integer. */
-	if (!PyInt_Check(p_new_lineno)) {
-		PyErr_SetString(PyExc_ValueError,
-				"lineno must be an integer");
-		return -1;
-	}
+    /*
+     * This code preserves the historical restrictions on
+     * setting the line number of a frame.
+     * Jumps are forbidden on a 'return' trace event (except after a yield).
+     * Jumps from 'call' trace events are also forbidden.
+     * In addition, jumps are forbidden when not tracing,
+     * as this is a debugging feature.
+     */
+    switch(f->f_state) {
+        case FRAME_CREATED:
+            PyErr_Format(PyExc_ValueError,
+                     "can't jump from the 'call' trace event of a new frame");
+            return -1;
+        case FRAME_RETURNED:
+        case FRAME_UNWINDING:
+        case FRAME_RAISED:
+        case FRAME_CLEARED:
+            PyErr_SetString(PyExc_ValueError,
+                "can only jump from a 'line' trace event");
+            return -1;
+        case FRAME_EXECUTING:
+        case FRAME_SUSPENDED:
+            /* You can only do this from within a trace function, not via
+            * _getframe or similar hackery. */
+            if (!f->f_trace) {
+                PyErr_Format(PyExc_ValueError,
+                            "f_lineno can only be set by a trace function");
+                return -1;
+            }
+            break;
+    }
 
-	/* You can only do this from within a trace function, not via
-	 * _getframe or similar hackery. */
-	if (!f->f_trace)
-	{
-		PyErr_Format(PyExc_ValueError,
-			     "f_lineno can only be set by a trace function");
-		return -1;
-	}
+    int new_lineno;
 
-	/* Fail if the line comes before the start of the code block. */
-	new_lineno = (int) PyInt_AsLong(p_new_lineno);
-	if (new_lineno < f->f_code->co_firstlineno) {
-		PyErr_Format(PyExc_ValueError,
-			     "line %d comes before the current code block",
-			     new_lineno);
-		return -1;
-	}
+    /* Fail if the line falls outside the code block and
+        select first line with actual code. */
+    int overflow;
+    long l_new_lineno = PyLong_AsLongAndOverflow(p_new_lineno, &overflow);
+    if (overflow
+#if SIZEOF_LONG > SIZEOF_INT
+        || l_new_lineno > INT_MAX
+        || l_new_lineno < INT_MIN
+#endif
+    ) {
+        PyErr_SetString(PyExc_ValueError,
+                        "lineno out of range");
+        return -1;
+    }
+    new_lineno = (int)l_new_lineno;
 
-	/* Find the bytecode offset for the start of the given line, or the
-	 * first code-owning line after it. */
-	PyString_AsStringAndSize(f->f_code->co_lnotab, &lnotab, &lnotab_len);
-	addr = 0;
-	line = f->f_code->co_firstlineno;
-	new_lasti = -1;
-	for (offset = 0; offset < lnotab_len; offset += 2) {
-		addr += lnotab[offset];
-		line += lnotab[offset+1];
-		if (line >= new_lineno) {
-			new_lasti = addr;
-			new_lineno = line;
-			break;
-		}
-	}
+    if (new_lineno < f->f_code->co_firstlineno) {
+        PyErr_Format(PyExc_ValueError,
+                    "line %d comes before the current code block",
+                    new_lineno);
+        return -1;
+    }
 
-	/* If we didn't reach the requested line, return an error. */
-	if (new_lasti == -1) {
-		PyErr_Format(PyExc_ValueError,
-			     "line %d comes after the current code block",
-			     new_lineno);
-		return -1;
-	}
+    /* PyCode_NewWithPosOnlyArgs limits co_code to be under INT_MAX so this
+     * should never overflow. */
+    int len = (int)(PyBytes_GET_SIZE(f->f_code->co_code) / sizeof(_Py_CODEUNIT));
+    int *lines = marklines(f->f_code, len);
+    if (lines == NULL) {
+        return -1;
+    }
 
-	/* We're now ready to look at the bytecode. */
-	PyString_AsStringAndSize(f->f_code->co_code, &code, &code_len);
-	min_addr = MIN(new_lasti, f->f_lasti);
-	max_addr = MAX(new_lasti, f->f_lasti);
+    new_lineno = first_line_not_before(lines, len, new_lineno);
+    if (new_lineno < 0) {
+        PyErr_Format(PyExc_ValueError,
+                    "line %d comes after the current code block",
+                    (int)l_new_lineno);
+        PyMem_Free(lines);
+        return -1;
+    }
 
-	/* You can't jump onto a line with an 'except' statement on it -
-	 * they expect to have an exception on the top of the stack, which
-	 * won't be true if you jump to them.  They always start with code
-	 * that either pops the exception using POP_TOP (plain 'except:'
-	 * lines do this) or duplicates the exception on the stack using
-	 * DUP_TOP (if there's an exception type specified).  See compile.c,
-	 * 'com_try_except' for the full details.  There aren't any other
-	 * cases (AFAIK) where a line's code can start with DUP_TOP or
-	 * POP_TOP, but if any ever appear, they'll be subject to the same
-	 * restriction (but with a different error message). */
-	if (code[new_lasti] == DUP_TOP || code[new_lasti] == POP_TOP) {
-		PyErr_SetString(PyExc_ValueError,
-		    "can't jump to 'except' line as there's no exception");
-		return -1;
-	}
+    int64_t *blocks = markblocks(f->f_code, len);
+    if (blocks == NULL) {
+        PyMem_Free(lines);
+        return -1;
+    }
 
-	/* You can't jump into or out of a 'finally' block because the 'try'
-	 * block leaves something on the stack for the END_FINALLY to clean
-	 * up.  So we walk the bytecode, maintaining a simulated blockstack.
-	 * When we reach the old or new address and it's in a 'finally' block
-	 * we note the address of the corresponding SETUP_FINALLY.  The jump
-	 * is only legal if neither address is in a 'finally' block or
-	 * they're both in the same one.  'blockstack' is a stack of the
-	 * bytecode addresses of the SETUP_X opcodes, and 'in_finally' tracks
-	 * whether we're in a 'finally' block at each blockstack level. */
-	f_lasti_setup_addr = -1;
-	new_lasti_setup_addr = -1;
-	memset(blockstack, '\0', sizeof(blockstack));
-	memset(in_finally, '\0', sizeof(in_finally));
-	blockstack_top = 0;
-	for (addr = 0; addr < code_len; addr++) {
-		unsigned char op = code[addr];
-		switch (op) {
-		case SETUP_LOOP:
-		case SETUP_EXCEPT:
-		case SETUP_FINALLY:
-			blockstack[blockstack_top++] = addr;
-			in_finally[blockstack_top-1] = 0;
-			break;
+    int64_t target_block_stack = -1;
+    int64_t best_block_stack = -1;
+    int best_addr = -1;
+    int64_t start_block_stack = blocks[f->f_lasti];
+    const char *msg = "cannot find bytecode for specified line";
+    for (int i = 0; i < len; i++) {
+        if (lines[i] == new_lineno) {
+            target_block_stack = blocks[i];
+            if (compatible_block_stack(start_block_stack, target_block_stack)) {
+                msg = NULL;
+                if (target_block_stack > best_block_stack) {
+                    best_block_stack = target_block_stack;
+                    best_addr = i;
+                }
+            }
+            else if (msg) {
+                if (target_block_stack >= 0) {
+                    msg = explain_incompatible_block_stack(target_block_stack);
+                }
+                else {
+                    msg = "code may be unreachable.";
+                }
+            }
+        }
+    }
+    PyMem_Free(blocks);
+    PyMem_Free(lines);
+    if (msg != NULL) {
+        PyErr_SetString(PyExc_ValueError, msg);
+        return -1;
+    }
 
-		case POP_BLOCK:
-			assert(blockstack_top > 0);
-			setup_op = code[blockstack[blockstack_top-1]];
-			if (setup_op == SETUP_FINALLY) {
-				in_finally[blockstack_top-1] = 1;
-			}
-			else {
-				blockstack_top--;
-			}
-			break;
+    /* Unwind block stack. */
+    while (start_block_stack > best_block_stack) {
+        Kind kind = top_block(start_block_stack);
+        switch(kind) {
+        case Loop:
+            frame_stack_pop(f);
+            break;
+        case Try:
+            frame_block_unwind(f);
+            break;
+        case With:
+            frame_block_unwind(f);
+            // Pop the exit function
+            frame_stack_pop(f);
+            break;
+        case Except:
+            PyErr_SetString(PyExc_ValueError,
+                "can't jump out of an 'except' block");
+            return -1;
+        }
+        start_block_stack = pop_block(start_block_stack);
+    }
 
-		case END_FINALLY:
-			/* Ignore END_FINALLYs for SETUP_EXCEPTs - they exist
-			 * in the bytecode but don't correspond to an actual
-			 * 'finally' block.  (If blockstack_top is 0, we must
-			 * be seeing such an END_FINALLY.) */
-			if (blockstack_top > 0) {
-				setup_op = code[blockstack[blockstack_top-1]];
-				if (setup_op == SETUP_FINALLY) {
-					blockstack_top--;
-				}
-			}
-			break;
-		}
-
-		/* For the addresses we're interested in, see whether they're
-		 * within a 'finally' block and if so, remember the address
-		 * of the SETUP_FINALLY. */
-		if (addr == new_lasti || addr == f->f_lasti) {
-			int i = 0;
-			int setup_addr = -1;
-			for (i = blockstack_top-1; i >= 0; i--) {
-				if (in_finally[i]) {
-					setup_addr = blockstack[i];
-					break;
-				}
-			}
-
-			if (setup_addr != -1) {
-				if (addr == new_lasti) {
-					new_lasti_setup_addr = setup_addr;
-				}
-
-				if (addr == f->f_lasti) {
-					f_lasti_setup_addr = setup_addr;
-				}
-			}
-		}
-
-		if (op >= HAVE_ARGUMENT) {
-			addr += 2;
-		}
-	}
-
-	/* Verify that the blockstack tracking code didn't get lost. */
-	assert(blockstack_top == 0);
-
-	/* After all that, are we jumping into / out of a 'finally' block? */
-	if (new_lasti_setup_addr != f_lasti_setup_addr) {
-		PyErr_SetString(PyExc_ValueError,
-			    "can't jump into or out of a 'finally' block");
-		return -1;
-	}
-
-
-	/* Police block-jumping (you can't jump into the middle of a block)
-	 * and ensure that the blockstack finishes up in a sensible state (by
-	 * popping any blocks we're jumping out of).  We look at all the
-	 * blockstack operations between the current position and the new
-	 * one, and keep track of how many blocks we drop out of on the way.
-	 * By also keeping track of the lowest blockstack position we see, we
-	 * can tell whether the jump goes into any blocks without coming out
-	 * again - in that case we raise an exception below. */
-	delta_iblock = 0;
-	for (addr = min_addr; addr < max_addr; addr++) {
-		unsigned char op = code[addr];
-		switch (op) {
-		case SETUP_LOOP:
-		case SETUP_EXCEPT:
-		case SETUP_FINALLY:
-			delta_iblock++;
-			break;
-
-		case POP_BLOCK:
-			delta_iblock--;
-			break;
-		}
-
-		min_delta_iblock = MIN(min_delta_iblock, delta_iblock);
-
-		if (op >= HAVE_ARGUMENT) {
-			addr += 2;
-		}
-	}
-
-	/* Derive the absolute iblock values from the deltas. */
-	min_iblock = f->f_iblock + min_delta_iblock;
-	if (new_lasti > f->f_lasti) {
-		/* Forwards jump. */
-		new_iblock = f->f_iblock + delta_iblock;
-	}
-	else {
-		/* Backwards jump. */
-		new_iblock = f->f_iblock - delta_iblock;
-	}
-
-	/* Are we jumping into a block? */
-	if (new_iblock > min_iblock) {
-		PyErr_SetString(PyExc_ValueError,
-				"can't jump into the middle of a block");
-		return -1;
-	}
-
-	/* Pop any blocks that we're jumping out of. */
-	while (f->f_iblock > new_iblock) {
-		PyTryBlock *b = &f->f_blockstack[--f->f_iblock];
-		while ((f->f_stacktop - f->f_valuestack) > b->b_level) {
-			PyObject *v = (*--f->f_stacktop);
-			Py_DECREF(v);
-		}
-	}
-
-	/* Finally set the new f_lineno and f_lasti and return OK. */
-	f->f_lineno = new_lineno;
-	f->f_lasti = new_lasti;
-	return 0;
+    /* Finally set the new f_lasti and return OK. */
+    f->f_lineno = 0;
+    f->f_lasti = best_addr;
+    return 0;
 }
 
 static PyObject *
 frame_gettrace(PyFrameObject *f, void *closure)
 {
-	PyObject* trace = f->f_trace;
+    PyObject* trace = f->f_trace;
 
-	if (trace == NULL)
-		trace = Py_None;
+    if (trace == NULL)
+        trace = Py_None;
 
-	Py_INCREF(trace);
+    Py_INCREF(trace);
 
-	return trace;
+    return trace;
 }
 
 static int
 frame_settrace(PyFrameObject *f, PyObject* v, void *closure)
 {
-	/* We rely on f_lineno being accurate when f_trace is set. */
+    if (v == Py_None) {
+        v = NULL;
+    }
+    Py_XINCREF(v);
+    Py_XSETREF(f->f_trace, v);
 
-	PyObject* old_value = f->f_trace;
-
-	Py_XINCREF(v);
-	f->f_trace = v;
-
-	if (v != NULL)
-		f->f_lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
-	Py_XDECREF(old_value);
-
-	return 0;
+    return 0;
 }
 
-static PyObject *
-frame_getrestricted(PyFrameObject *f, void *closure)
-{
-	return PyBool_FromLong(PyFrame_IsRestricted(f));
-}
 
 static PyGetSetDef frame_getsetlist[] = {
-	{"f_locals",	(getter)frame_getlocals, NULL, NULL},
-	{"f_lineno",	(getter)frame_getlineno,
-			(setter)frame_setlineno, NULL},
-	{"f_trace",	(getter)frame_gettrace, (setter)frame_settrace, NULL},
-	{"f_restricted",(getter)frame_getrestricted,NULL, NULL},
-	{0}
+    {"f_locals",        (getter)frame_getlocals, NULL, NULL},
+    {"f_lineno",        (getter)frame_getlineno,
+                    (setter)frame_setlineno, NULL},
+    {"f_trace",         (getter)frame_gettrace, (setter)frame_settrace, NULL},
+    {"f_lasti",         (getter)frame_getlasti, NULL, NULL},
+    {0}
 };
 
 /* Stack frames are allocated and deallocated at a considerable rate.
@@ -369,21 +544,20 @@ static PyGetSetDef frame_getsetlist[] = {
    the following fields are still valid:
 
      * ob_type, ob_size, f_code, f_valuestack;
-       
-     * f_locals, f_trace,
-       f_exc_type, f_exc_value, f_exc_traceback are NULL;
+
+     * f_locals, f_trace are NULL;
 
      * f_localsplus does not require re-allocation and
        the local variables in f_localsplus are NULL.
 
    2. We also maintain a separate free list of stack frames (just like
-   integers are allocated in a special way -- see intobject.c).  When
+   floats are allocated in a special way -- see floatobject.c).  When
    a stack frame is on the free list, only the following members have
    a meaning:
-	ob_type		== &Frametype
-	f_back		next item on free list, or NULL
-	f_stacksize	size of value stack
-        ob_size         size of localsplus
+    ob_type             == &Frametype
+    f_back              next item on free list, or NULL
+    f_stacksize         size of value stack
+    ob_size             size of localsplus
    Note that the value and block stacks are preserved -- this can save
    another malloc() call or two (and two free() calls as well!).
    Also note that, unlike for integers, each frame object is a
@@ -393,457 +567,630 @@ static PyGetSetDef frame_getsetlist[] = {
    call depth of more than 20 or 30 is probably already exceptional
    unless the program contains run-away recursion.  I hope.
 
-   Later, MAXFREELIST was added to bound the # of frames saved on
+   Later, PyFrame_MAXFREELIST was added to bound the # of frames saved on
    free_list.  Else programs creating lots of cyclic trash involving
    frames could provoke free_list into growing without bound.
 */
+/* max value for numfree */
+#define PyFrame_MAXFREELIST 200
 
-static PyFrameObject *free_list = NULL;
-static int numfree = 0;		/* number of frames currently in free_list */
-#define MAXFREELIST 200		/* max value for numfree */
-
-static void
+static void _Py_HOT_FUNCTION
 frame_dealloc(PyFrameObject *f)
 {
-	PyObject **p, **valuestack;
-	PyCodeObject *co;
+    if (_PyObject_GC_IS_TRACKED(f)) {
+        _PyObject_GC_UNTRACK(f);
+    }
 
- 	PyObject_GC_UnTrack(f);
-	Py_TRASHCAN_SAFE_BEGIN(f)
-	/* Kill all local variables */
-        valuestack = f->f_valuestack;
-        for (p = f->f_localsplus; p < valuestack; p++)
-                Py_CLEAR(*p);
+    Py_TRASHCAN_BEGIN(f, frame_dealloc);
+    /* Kill all local variables */
+    PyObject **valuestack = f->f_valuestack;
+    for (PyObject **p = f->f_localsplus; p < valuestack; p++) {
+        Py_CLEAR(*p);
+    }
 
-	/* Free stack */
-	if (f->f_stacktop != NULL) {
-		for (p = valuestack; p < f->f_stacktop; p++)
-			Py_XDECREF(*p);
-	}
+    /* Free stack */
+    for (int i = 0; i < f->f_stackdepth; i++) {
+        Py_XDECREF(f->f_valuestack[i]);
+    }
+    f->f_stackdepth = 0;
 
-	Py_XDECREF(f->f_back);
-	Py_DECREF(f->f_builtins);
-	Py_DECREF(f->f_globals);
-	Py_CLEAR(f->f_locals);
-	Py_CLEAR(f->f_trace);
-	Py_CLEAR(f->f_exc_type);
-	Py_CLEAR(f->f_exc_value);
-	Py_CLEAR(f->f_exc_traceback);
+    Py_XDECREF(f->f_back);
+    Py_DECREF(f->f_builtins);
+    Py_DECREF(f->f_globals);
+    Py_CLEAR(f->f_locals);
+    Py_CLEAR(f->f_trace);
 
-        co = f->f_code;
-        if (co->co_zombieframe == NULL)
-                co->co_zombieframe = f;
-	else if (numfree < MAXFREELIST) {
-		++numfree;
-		f->f_back = free_list;
-		free_list = f;
+    PyCodeObject *co = f->f_code;
+    if (co->co_zombieframe == NULL) {
+        co->co_zombieframe = f;
+    }
+    else {
+        struct _Py_frame_state *state = get_frame_state();
+#ifdef Py_DEBUG
+        // frame_dealloc() must not be called after _PyFrame_Fini()
+        assert(state->numfree != -1);
+#endif
+        if (state->numfree < PyFrame_MAXFREELIST) {
+            ++state->numfree;
+            f->f_back = state->free_list;
+            state->free_list = f;
         }
-	else 
-		PyObject_GC_Del(f);
+        else {
+            PyObject_GC_Del(f);
+        }
+    }
 
-        Py_DECREF(co);
-	Py_TRASHCAN_SAFE_END(f)
+    Py_DECREF(co);
+    Py_TRASHCAN_END;
+}
+
+static inline Py_ssize_t
+frame_nslots(PyFrameObject *frame)
+{
+    PyCodeObject *code = frame->f_code;
+    return (code->co_nlocals
+            + PyTuple_GET_SIZE(code->co_cellvars)
+            + PyTuple_GET_SIZE(code->co_freevars));
 }
 
 static int
 frame_traverse(PyFrameObject *f, visitproc visit, void *arg)
 {
-	PyObject **fastlocals, **p;
-	int i, slots;
+    Py_VISIT(f->f_back);
+    Py_VISIT(f->f_code);
+    Py_VISIT(f->f_builtins);
+    Py_VISIT(f->f_globals);
+    Py_VISIT(f->f_locals);
+    Py_VISIT(f->f_trace);
 
-	Py_VISIT(f->f_back);
-	Py_VISIT(f->f_code);
-	Py_VISIT(f->f_builtins);
-	Py_VISIT(f->f_globals);
-	Py_VISIT(f->f_locals);
-	Py_VISIT(f->f_trace);
-	Py_VISIT(f->f_exc_type);
-	Py_VISIT(f->f_exc_value);
-	Py_VISIT(f->f_exc_traceback);
+    /* locals */
+    PyObject **fastlocals = f->f_localsplus;
+    for (Py_ssize_t i = frame_nslots(f); --i >= 0; ++fastlocals) {
+        Py_VISIT(*fastlocals);
+    }
 
-	/* locals */
-	slots = f->f_code->co_nlocals + PyTuple_GET_SIZE(f->f_code->co_cellvars) + PyTuple_GET_SIZE(f->f_code->co_freevars);
-	fastlocals = f->f_localsplus;
-	for (i = slots; --i >= 0; ++fastlocals)
-		Py_VISIT(*fastlocals);
-
-	/* stack */
-	if (f->f_stacktop != NULL) {
-		for (p = f->f_valuestack; p < f->f_stacktop; p++)
-			Py_VISIT(*p);
-	}
-	return 0;
+    /* stack */
+    for (int i = 0; i < f->f_stackdepth; i++) {
+        Py_VISIT(f->f_valuestack[i]);
+    }
+    return 0;
 }
 
-static void
-frame_clear(PyFrameObject *f)
+static int
+frame_tp_clear(PyFrameObject *f)
 {
-	PyObject **fastlocals, **p, **oldtop;
-	int i, slots;
+    /* Before anything else, make sure that this frame is clearly marked
+     * as being defunct!  Else, e.g., a generator reachable from this
+     * frame may also point to this frame, believe itself to still be
+     * active, and try cleaning up this frame again.
+     */
+    f->f_state = FRAME_CLEARED;
 
-	/* Before anything else, make sure that this frame is clearly marked
-         * as being defunct!  Else, e.g., a generator reachable from this
-         * frame may also point to this frame, believe itself to still be
-         * active, and try cleaning up this frame again.
-         */
-	oldtop = f->f_stacktop;
-        f->f_stacktop = NULL;
+    Py_CLEAR(f->f_trace);
 
-	Py_CLEAR(f->f_exc_type);
-	Py_CLEAR(f->f_exc_value);
-	Py_CLEAR(f->f_exc_traceback);
-	Py_CLEAR(f->f_trace);
+    /* locals */
+    PyObject **fastlocals = f->f_localsplus;
+    for (Py_ssize_t i = frame_nslots(f); --i >= 0; ++fastlocals) {
+        Py_CLEAR(*fastlocals);
+    }
 
-	/* locals */
-	slots = f->f_code->co_nlocals + PyTuple_GET_SIZE(f->f_code->co_cellvars) + PyTuple_GET_SIZE(f->f_code->co_freevars);
-	fastlocals = f->f_localsplus;
-	for (i = slots; --i >= 0; ++fastlocals)
-		Py_CLEAR(*fastlocals);
-
-	/* stack */
-	if (oldtop != NULL) {
-		for (p = f->f_valuestack; p < oldtop; p++)
-			Py_CLEAR(*p);
-	}
+    /* stack */
+    for (int i = 0; i < f->f_stackdepth; i++) {
+        Py_CLEAR(f->f_valuestack[i]);
+    }
+    f->f_stackdepth = 0;
+    return 0;
 }
 
+static PyObject *
+frame_clear(PyFrameObject *f, PyObject *Py_UNUSED(ignored))
+{
+    if (_PyFrame_IsExecuting(f)) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "cannot clear an executing frame");
+        return NULL;
+    }
+    if (f->f_gen) {
+        _PyGen_Finalize(f->f_gen);
+        assert(f->f_gen == NULL);
+    }
+    (void)frame_tp_clear(f);
+    Py_RETURN_NONE;
+}
 
-PyTypeObject PyFrame_Type = {
-	PyObject_HEAD_INIT(&PyType_Type)
-	0,
-	"frame",
-	sizeof(PyFrameObject),
-	sizeof(PyObject *),
-	(destructor)frame_dealloc, 		/* tp_dealloc */
-	0,					/* tp_print */
-	0, 					/* tp_getattr */
-	0,			 		/* tp_setattr */
-	0,					/* tp_compare */
-	0,					/* tp_repr */
-	0,					/* tp_as_number */
-	0,					/* tp_as_sequence */
-	0,					/* tp_as_mapping */
-	0,					/* tp_hash */
-	0,					/* tp_call */
-	0,					/* tp_str */
-	PyObject_GenericGetAttr,		/* tp_getattro */
-	PyObject_GenericSetAttr,		/* tp_setattro */
-	0,					/* tp_as_buffer */
-	Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
-	0,             				/* tp_doc */
- 	(traverseproc)frame_traverse,		/* tp_traverse */
-	(inquiry)frame_clear,			/* tp_clear */
-	0,					/* tp_richcompare */
-	0,					/* tp_weaklistoffset */
-	0,					/* tp_iter */
-	0,					/* tp_iternext */
-	0,					/* tp_methods */
-	frame_memberlist,			/* tp_members */
-	frame_getsetlist,			/* tp_getset */
-	0,					/* tp_base */
-	0,					/* tp_dict */
+PyDoc_STRVAR(clear__doc__,
+"F.clear(): clear most references held by the frame");
+
+static PyObject *
+frame_sizeof(PyFrameObject *f, PyObject *Py_UNUSED(ignored))
+{
+    Py_ssize_t res, extras, ncells, nfrees;
+
+    PyCodeObject *code = f->f_code;
+    ncells = PyTuple_GET_SIZE(code->co_cellvars);
+    nfrees = PyTuple_GET_SIZE(code->co_freevars);
+    extras = code->co_stacksize + code->co_nlocals + ncells + nfrees;
+    /* subtract one as it is already included in PyFrameObject */
+    res = sizeof(PyFrameObject) + (extras-1) * sizeof(PyObject *);
+
+    return PyLong_FromSsize_t(res);
+}
+
+PyDoc_STRVAR(sizeof__doc__,
+"F.__sizeof__() -> size of F in memory, in bytes");
+
+static PyObject *
+frame_repr(PyFrameObject *f)
+{
+    int lineno = PyFrame_GetLineNumber(f);
+    PyCodeObject *code = f->f_code;
+    return PyUnicode_FromFormat(
+        "<frame at %p, file %R, line %d, code %S>",
+        f, code->co_filename, lineno, code->co_name);
+}
+
+static PyMethodDef frame_methods[] = {
+    {"clear",           (PyCFunction)frame_clear,       METH_NOARGS,
+     clear__doc__},
+    {"__sizeof__",      (PyCFunction)frame_sizeof,      METH_NOARGS,
+     sizeof__doc__},
+    {NULL,              NULL}   /* sentinel */
 };
 
-static PyObject *builtin_object;
+PyTypeObject PyFrame_Type = {
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    "frame",
+    sizeof(PyFrameObject),
+    sizeof(PyObject *),
+    (destructor)frame_dealloc,                  /* tp_dealloc */
+    0,                                          /* tp_vectorcall_offset */
+    0,                                          /* tp_getattr */
+    0,                                          /* tp_setattr */
+    0,                                          /* tp_as_async */
+    (reprfunc)frame_repr,                       /* tp_repr */
+    0,                                          /* tp_as_number */
+    0,                                          /* tp_as_sequence */
+    0,                                          /* tp_as_mapping */
+    0,                                          /* tp_hash */
+    0,                                          /* tp_call */
+    0,                                          /* tp_str */
+    PyObject_GenericGetAttr,                    /* tp_getattro */
+    PyObject_GenericSetAttr,                    /* tp_setattro */
+    0,                                          /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
+    0,                                          /* tp_doc */
+    (traverseproc)frame_traverse,               /* tp_traverse */
+    (inquiry)frame_tp_clear,                    /* tp_clear */
+    0,                                          /* tp_richcompare */
+    0,                                          /* tp_weaklistoffset */
+    0,                                          /* tp_iter */
+    0,                                          /* tp_iternext */
+    frame_methods,                              /* tp_methods */
+    frame_memberlist,                           /* tp_members */
+    frame_getsetlist,                           /* tp_getset */
+    0,                                          /* tp_base */
+    0,                                          /* tp_dict */
+};
 
-int _PyFrame_Init()
+_Py_IDENTIFIER(__builtins__);
+
+static inline PyFrameObject*
+frame_alloc(PyCodeObject *code)
 {
-	builtin_object = PyString_InternFromString("__builtins__");
-	return (builtin_object != NULL);
-}
+    PyFrameObject *f = code->co_zombieframe;
+    if (f != NULL) {
+        code->co_zombieframe = NULL;
+        _Py_NewReference((PyObject *)f);
+        assert(f->f_code == code);
+        return f;
+    }
 
-PyFrameObject *
-PyFrame_New(PyThreadState *tstate, PyCodeObject *code, PyObject *globals,
-	    PyObject *locals)
-{
-	PyFrameObject *back = tstate->frame;
-	PyFrameObject *f;
-	PyObject *builtins;
-	Py_ssize_t i;
-
+    Py_ssize_t ncells = PyTuple_GET_SIZE(code->co_cellvars);
+    Py_ssize_t nfrees = PyTuple_GET_SIZE(code->co_freevars);
+    Py_ssize_t extras = code->co_stacksize + code->co_nlocals + ncells + nfrees;
+    struct _Py_frame_state *state = get_frame_state();
+    if (state->free_list == NULL)
+    {
+        f = PyObject_GC_NewVar(PyFrameObject, &PyFrame_Type, extras);
+        if (f == NULL) {
+            return NULL;
+        }
+    }
+    else {
 #ifdef Py_DEBUG
-	if (code == NULL || globals == NULL || !PyDict_Check(globals) ||
-	    (locals != NULL && !PyMapping_Check(locals))) {
-		PyErr_BadInternalCall();
-		return NULL;
-	}
+        // frame_alloc() must not be called after _PyFrame_Fini()
+        assert(state->numfree != -1);
 #endif
-	if (back == NULL || back->f_globals != globals) {
-		builtins = PyDict_GetItem(globals, builtin_object);
-		if (builtins) {
-			if (PyModule_Check(builtins)) {
-				builtins = PyModule_GetDict(builtins);
-				assert(!builtins || PyDict_Check(builtins));
-			}
-			else if (!PyDict_Check(builtins))
-				builtins = NULL;
-		}
-		if (builtins == NULL) {
-			/* No builtins!  Make up a minimal one
-			   Give them 'None', at least. */
-			builtins = PyDict_New();
-			if (builtins == NULL ||
-			    PyDict_SetItemString(
-				    builtins, "None", Py_None) < 0)
-				return NULL;
-		}
-		else
-			Py_INCREF(builtins);
+        assert(state->numfree > 0);
+        --state->numfree;
+        f = state->free_list;
+        state->free_list = state->free_list->f_back;
+        if (Py_SIZE(f) < extras) {
+            PyFrameObject *new_f = PyObject_GC_Resize(PyFrameObject, f, extras);
+            if (new_f == NULL) {
+                PyObject_GC_Del(f);
+                return NULL;
+            }
+            f = new_f;
+        }
+        _Py_NewReference((PyObject *)f);
+    }
 
-	}
-	else {
-		/* If we share the globals, we share the builtins.
-		   Save a lookup and a call. */
-		builtins = back->f_builtins;
-		assert(builtins != NULL && PyDict_Check(builtins));
-		Py_INCREF(builtins);
-	}
-	if (code->co_zombieframe != NULL) {
-                f = code->co_zombieframe;
-                code->co_zombieframe = NULL;
-                _Py_NewReference((PyObject *)f);
-                assert(f->f_code == code);
-	}
-        else {
-                Py_ssize_t extras, ncells, nfrees;
-                ncells = PyTuple_GET_SIZE(code->co_cellvars);
-                nfrees = PyTuple_GET_SIZE(code->co_freevars);
-                extras = code->co_stacksize + code->co_nlocals + ncells +
-                    nfrees;
-                if (free_list == NULL) {
-                    f = PyObject_GC_NewVar(PyFrameObject, &PyFrame_Type,
-                        extras);
-                    if (f == NULL) {
-                            Py_DECREF(builtins);
-                            return NULL;
-                    }
-                }
-                else {
-                    assert(numfree > 0);
-                    --numfree;
-                    f = free_list;
-                    free_list = free_list->f_back;
-                    if (f->ob_size < extras) {
-                            f = PyObject_GC_Resize(PyFrameObject, f, extras);
-                            if (f == NULL) {
-                                    Py_DECREF(builtins);
-                                    return NULL;
-                            }
-                    }
-                    _Py_NewReference((PyObject *)f);
-                }
-
-		f->f_code = code;
-		extras = code->co_nlocals + ncells + nfrees;
-		f->f_valuestack = f->f_localsplus + extras;
-		for (i=0; i<extras; i++)
-			f->f_localsplus[i] = NULL;
-		f->f_locals = NULL;
-		f->f_trace = NULL;
-                f->f_exc_type = f->f_exc_value = f->f_exc_traceback = NULL;
-	}
-	f->f_stacktop = f->f_valuestack;
-	f->f_builtins = builtins;
-	Py_XINCREF(back);
-	f->f_back = back;
-	Py_INCREF(code);
-	Py_INCREF(globals);
-	f->f_globals = globals;
-	/* Most functions have CO_NEWLOCALS and CO_OPTIMIZED set. */
-	if ((code->co_flags & (CO_NEWLOCALS | CO_OPTIMIZED)) ==
-		(CO_NEWLOCALS | CO_OPTIMIZED))
-		; /* f_locals = NULL; will be set by PyFrame_FastToLocals() */
-	else if (code->co_flags & CO_NEWLOCALS) {
-		locals = PyDict_New();
-		if (locals == NULL) {
-			Py_DECREF(f);
-			return NULL;
-		}
-                f->f_locals = locals;
-	}
-	else {
-		if (locals == NULL)
-			locals = globals;
-		Py_INCREF(locals);
-                f->f_locals = locals;
-	}
-	f->f_tstate = tstate;
-
-	f->f_lasti = -1;
-	f->f_lineno = code->co_firstlineno;
-	f->f_iblock = 0;
-
-	_PyObject_GC_TRACK(f);
-	return f;
+    extras = code->co_nlocals + ncells + nfrees;
+    f->f_valuestack = f->f_localsplus + extras;
+    for (Py_ssize_t i=0; i < extras; i++) {
+        f->f_localsplus[i] = NULL;
+    }
+    return f;
 }
+
+
+PyFrameObject* _Py_HOT_FUNCTION
+_PyFrame_New_NoTrack(PyThreadState *tstate, PyFrameConstructor *con, PyObject *locals)
+{
+    assert(con != NULL);
+    assert(con->fc_globals != NULL);
+    assert(con->fc_builtins != NULL);
+    assert(con->fc_code != NULL);
+    assert(locals == NULL || PyMapping_Check(locals));
+
+    PyFrameObject *f = frame_alloc((PyCodeObject *)con->fc_code);
+    if (f == NULL) {
+        return NULL;
+    }
+
+    f->f_back = (PyFrameObject*)Py_XNewRef(tstate->frame);
+    f->f_code = (PyCodeObject *)Py_NewRef(con->fc_code);
+    f->f_builtins = Py_NewRef(con->fc_builtins);
+    f->f_globals = Py_NewRef(con->fc_globals);
+    f->f_locals = Py_XNewRef(locals);
+    // f_valuestack initialized by frame_alloc()
+    f->f_trace = NULL;
+    f->f_stackdepth = 0;
+    f->f_trace_lines = 1;
+    f->f_trace_opcodes = 0;
+    f->f_gen = NULL;
+    f->f_lasti = -1;
+    f->f_lineno = 0;
+    f->f_iblock = 0;
+    f->f_state = FRAME_CREATED;
+    // f_blockstack and f_localsplus initialized by frame_alloc()
+    return f;
+}
+
+/* Legacy API */
+PyFrameObject*
+PyFrame_New(PyThreadState *tstate, PyCodeObject *code,
+            PyObject *globals, PyObject *locals)
+{
+    PyObject *builtins = _PyEval_BuiltinsFromGlobals(tstate, globals); // borrowed ref
+    if (builtins == NULL) {
+        return NULL;
+    }
+    PyFrameConstructor desc = {
+        .fc_globals = globals,
+        .fc_builtins = builtins,
+        .fc_name = code->co_name,
+        .fc_qualname = code->co_name,
+        .fc_code = (PyObject *)code,
+        .fc_defaults = NULL,
+        .fc_kwdefaults = NULL,
+        .fc_closure = NULL
+    };
+    PyFrameObject *f = _PyFrame_New_NoTrack(tstate, &desc, locals);
+    if (f) {
+        _PyObject_GC_TRACK(f);
+    }
+    return f;
+}
+
 
 /* Block management */
 
 void
 PyFrame_BlockSetup(PyFrameObject *f, int type, int handler, int level)
 {
-	PyTryBlock *b;
-	if (f->f_iblock >= CO_MAXBLOCKS)
-		Py_FatalError("XXX block stack overflow");
-	b = &f->f_blockstack[f->f_iblock++];
-	b->b_type = type;
-	b->b_level = level;
-	b->b_handler = handler;
+    PyTryBlock *b;
+    if (f->f_iblock >= CO_MAXBLOCKS) {
+        Py_FatalError("block stack overflow");
+    }
+    b = &f->f_blockstack[f->f_iblock++];
+    b->b_type = type;
+    b->b_level = level;
+    b->b_handler = handler;
 }
 
 PyTryBlock *
 PyFrame_BlockPop(PyFrameObject *f)
 {
-	PyTryBlock *b;
-	if (f->f_iblock <= 0)
-		Py_FatalError("XXX block stack underflow");
-	b = &f->f_blockstack[--f->f_iblock];
-	return b;
+    PyTryBlock *b;
+    if (f->f_iblock <= 0) {
+        Py_FatalError("block stack underflow");
+    }
+    b = &f->f_blockstack[--f->f_iblock];
+    return b;
 }
 
-/* Convert between "fast" version of locals and dictionary version */
+/* Convert between "fast" version of locals and dictionary version.
 
-static void
+   map and values are input arguments.  map is a tuple of strings.
+   values is an array of PyObject*.  At index i, map[i] is the name of
+   the variable with value values[i].  The function copies the first
+   nmap variable from map/values into dict.  If values[i] is NULL,
+   the variable is deleted from dict.
+
+   If deref is true, then the values being copied are cell variables
+   and the value is extracted from the cell variable before being put
+   in dict.
+ */
+
+static int
 map_to_dict(PyObject *map, Py_ssize_t nmap, PyObject *dict, PyObject **values,
-	    Py_ssize_t deref)
+            int deref)
 {
-	Py_ssize_t j;
-	for (j = nmap; --j >= 0; ) {
-		PyObject *key = PyTuple_GET_ITEM(map, j);
-		PyObject *value = values[j];
-		if (deref)
-			value = PyCell_GET(value);
-		if (value == NULL) {
-			if (PyObject_DelItem(dict, key) != 0)
-				PyErr_Clear();
-		}
-		else {
-			if (PyObject_SetItem(dict, key, value) != 0)
-				PyErr_Clear();
-		}
-	}
+    Py_ssize_t j;
+    assert(PyTuple_Check(map));
+    assert(PyDict_Check(dict));
+    assert(PyTuple_Size(map) >= nmap);
+    for (j=0; j < nmap; j++) {
+        PyObject *key = PyTuple_GET_ITEM(map, j);
+        PyObject *value = values[j];
+        assert(PyUnicode_Check(key));
+        if (deref && value != NULL) {
+            assert(PyCell_Check(value));
+            value = PyCell_GET(value);
+        }
+        if (value == NULL) {
+            if (PyObject_DelItem(dict, key) != 0) {
+                if (PyErr_ExceptionMatches(PyExc_KeyError))
+                    PyErr_Clear();
+                else
+                    return -1;
+            }
+        }
+        else {
+            if (PyObject_SetItem(dict, key, value) != 0)
+                return -1;
+        }
+    }
+    return 0;
 }
+
+/* Copy values from the "locals" dict into the fast locals.
+
+   dict is an input argument containing string keys representing
+   variables names and arbitrary PyObject* as values.
+
+   map and values are input arguments.  map is a tuple of strings.
+   values is an array of PyObject*.  At index i, map[i] is the name of
+   the variable with value values[i].  The function copies the first
+   nmap variable from map/values into dict.  If values[i] is NULL,
+   the variable is deleted from dict.
+
+   If deref is true, then the values being copied are cell variables
+   and the value is extracted from the cell variable before being put
+   in dict.  If clear is true, then variables in map but not in dict
+   are set to NULL in map; if clear is false, variables missing in
+   dict are ignored.
+
+   Exceptions raised while modifying the dict are silently ignored,
+   because there is no good way to report them.
+*/
 
 static void
 dict_to_map(PyObject *map, Py_ssize_t nmap, PyObject *dict, PyObject **values,
-	    Py_ssize_t deref, int clear)
+            int deref, int clear)
 {
-	Py_ssize_t j;
-	for (j = nmap; --j >= 0; ) {
-		PyObject *key = PyTuple_GET_ITEM(map, j);
-		PyObject *value = PyObject_GetItem(dict, key);
-		if (value == NULL)
-			PyErr_Clear();
-		if (deref) {
-			if (value || clear) {
-				if (PyCell_GET(values[j]) != value) {
-					if (PyCell_Set(values[j], value) < 0)
-						PyErr_Clear();
-				}
-			}
-		} else if (value != NULL || clear) {
-			if (values[j] != value) {
-				Py_XINCREF(value);
-				Py_XDECREF(values[j]);
-				values[j] = value;
-			}
-		}
-		Py_XDECREF(value);
-	}
+    Py_ssize_t j;
+    assert(PyTuple_Check(map));
+    assert(PyDict_Check(dict));
+    assert(PyTuple_Size(map) >= nmap);
+    for (j=0; j < nmap; j++) {
+        PyObject *key = PyTuple_GET_ITEM(map, j);
+        PyObject *value = PyObject_GetItem(dict, key);
+        assert(PyUnicode_Check(key));
+        /* We only care about NULLs if clear is true. */
+        if (value == NULL) {
+            PyErr_Clear();
+            if (!clear)
+                continue;
+        }
+        if (deref) {
+            assert(PyCell_Check(values[j]));
+            if (PyCell_GET(values[j]) != value) {
+                if (PyCell_Set(values[j], value) < 0)
+                    PyErr_Clear();
+            }
+        } else if (values[j] != value) {
+            Py_XINCREF(value);
+            Py_XSETREF(values[j], value);
+        }
+        Py_XDECREF(value);
+    }
+}
+
+int
+PyFrame_FastToLocalsWithError(PyFrameObject *f)
+{
+    /* Merge fast locals into f->f_locals */
+    PyObject *locals, *map;
+    PyObject **fast;
+    PyCodeObject *co;
+    Py_ssize_t j;
+    Py_ssize_t ncells, nfreevars;
+
+    if (f == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    locals = f->f_locals;
+    if (locals == NULL) {
+        locals = f->f_locals = PyDict_New();
+        if (locals == NULL)
+            return -1;
+    }
+    co = f->f_code;
+    map = co->co_varnames;
+    if (!PyTuple_Check(map)) {
+        PyErr_Format(PyExc_SystemError,
+                     "co_varnames must be a tuple, not %s",
+                     Py_TYPE(map)->tp_name);
+        return -1;
+    }
+    fast = f->f_localsplus;
+    j = PyTuple_GET_SIZE(map);
+    if (j > co->co_nlocals)
+        j = co->co_nlocals;
+    if (co->co_nlocals) {
+        if (map_to_dict(map, j, locals, fast, 0) < 0)
+            return -1;
+    }
+    ncells = PyTuple_GET_SIZE(co->co_cellvars);
+    nfreevars = PyTuple_GET_SIZE(co->co_freevars);
+    if (ncells || nfreevars) {
+        if (map_to_dict(co->co_cellvars, ncells,
+                        locals, fast + co->co_nlocals, 1))
+            return -1;
+
+        /* If the namespace is unoptimized, then one of the
+           following cases applies:
+           1. It does not contain free variables, because it
+              uses import * or is a top-level namespace.
+           2. It is a class namespace.
+           We don't want to accidentally copy free variables
+           into the locals dict used by the class.
+        */
+        if (co->co_flags & CO_OPTIMIZED) {
+            if (map_to_dict(co->co_freevars, nfreevars,
+                            locals, fast + co->co_nlocals + ncells, 1) < 0)
+                return -1;
+        }
+    }
+    return 0;
 }
 
 void
 PyFrame_FastToLocals(PyFrameObject *f)
 {
-	/* Merge fast locals into f->f_locals */
-	PyObject *locals, *map;
-	PyObject **fast;
-	PyObject *error_type, *error_value, *error_traceback;
-	PyCodeObject *co;
-	Py_ssize_t j;
-        int ncells, nfreevars;
-	if (f == NULL)
-		return;
-	locals = f->f_locals;
-	if (locals == NULL) {
-		locals = f->f_locals = PyDict_New();
-		if (locals == NULL) {
-			PyErr_Clear(); /* Can't report it :-( */
-			return;
-		}
-	}
-	co = f->f_code;
-	map = co->co_varnames;
-	if (!PyTuple_Check(map))
-		return;
-	PyErr_Fetch(&error_type, &error_value, &error_traceback);
-	fast = f->f_localsplus;
-	j = PyTuple_GET_SIZE(map);
-	if (j > co->co_nlocals)
-		j = co->co_nlocals;
-	if (co->co_nlocals)
-		map_to_dict(map, j, locals, fast, 0);
-	ncells = PyTuple_GET_SIZE(co->co_cellvars);
-	nfreevars = PyTuple_GET_SIZE(co->co_freevars);
-	if (ncells || nfreevars) {
-		map_to_dict(co->co_cellvars, ncells,
-			    locals, fast + co->co_nlocals, 1);
-		map_to_dict(co->co_freevars, nfreevars,
-			    locals, fast + co->co_nlocals + ncells, 1);
-	}
-	PyErr_Restore(error_type, error_value, error_traceback);
+    int res;
+
+    assert(!PyErr_Occurred());
+
+    res = PyFrame_FastToLocalsWithError(f);
+    if (res < 0)
+        PyErr_Clear();
 }
 
 void
 PyFrame_LocalsToFast(PyFrameObject *f, int clear)
 {
-	/* Merge f->f_locals into fast locals */
-	PyObject *locals, *map;
-	PyObject **fast;
-	PyObject *error_type, *error_value, *error_traceback;
-	PyCodeObject *co;
-	Py_ssize_t j;
-	int ncells, nfreevars;
-	if (f == NULL)
-		return;
-	locals = f->f_locals;
-	co = f->f_code;
-	map = co->co_varnames;
-	if (locals == NULL)
-		return;
-	if (!PyTuple_Check(map))
-		return;
-	PyErr_Fetch(&error_type, &error_value, &error_traceback);
-	fast = f->f_localsplus;
-	j = PyTuple_GET_SIZE(map);
-	if (j > co->co_nlocals)
-		j = co->co_nlocals;
-	if (co->co_nlocals)
-	    dict_to_map(co->co_varnames, j, locals, fast, 0, clear);
-	ncells = PyTuple_GET_SIZE(co->co_cellvars);
-	nfreevars = PyTuple_GET_SIZE(co->co_freevars);
-	if (ncells || nfreevars) {
-		dict_to_map(co->co_cellvars, ncells,
-			    locals, fast + co->co_nlocals, 1, clear);
-		dict_to_map(co->co_freevars, nfreevars,
-			    locals, fast + co->co_nlocals + ncells, 1, 
- 			    clear);
-	}
-	PyErr_Restore(error_type, error_value, error_traceback);
+    /* Merge f->f_locals into fast locals */
+    PyObject *locals, *map;
+    PyObject **fast;
+    PyObject *error_type, *error_value, *error_traceback;
+    PyCodeObject *co;
+    Py_ssize_t j;
+    Py_ssize_t ncells, nfreevars;
+    if (f == NULL)
+        return;
+    locals = f->f_locals;
+    co = f->f_code;
+    map = co->co_varnames;
+    if (locals == NULL)
+        return;
+    if (!PyTuple_Check(map))
+        return;
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+    fast = f->f_localsplus;
+    j = PyTuple_GET_SIZE(map);
+    if (j > co->co_nlocals)
+        j = co->co_nlocals;
+    if (co->co_nlocals)
+        dict_to_map(co->co_varnames, j, locals, fast, 0, clear);
+    ncells = PyTuple_GET_SIZE(co->co_cellvars);
+    nfreevars = PyTuple_GET_SIZE(co->co_freevars);
+    if (ncells || nfreevars) {
+        dict_to_map(co->co_cellvars, ncells,
+                    locals, fast + co->co_nlocals, 1, clear);
+        /* Same test as in PyFrame_FastToLocals() above. */
+        if (co->co_flags & CO_OPTIMIZED) {
+            dict_to_map(co->co_freevars, nfreevars,
+                locals, fast + co->co_nlocals + ncells, 1,
+                clear);
+        }
+    }
+    PyErr_Restore(error_type, error_value, error_traceback);
 }
 
 /* Clear out the free list */
+void
+_PyFrame_ClearFreeList(PyInterpreterState *interp)
+{
+    struct _Py_frame_state *state = &interp->frame;
+    while (state->free_list != NULL) {
+        PyFrameObject *f = state->free_list;
+        state->free_list = state->free_list->f_back;
+        PyObject_GC_Del(f);
+        --state->numfree;
+    }
+    assert(state->numfree == 0);
+}
 
 void
-PyFrame_Fini(void)
+_PyFrame_Fini(PyInterpreterState *interp)
 {
-	while (free_list != NULL) {
-		PyFrameObject *f = free_list;
-		free_list = free_list->f_back;
-		PyObject_GC_Del(f);
-		--numfree;
-	}
-	assert(numfree == 0);
-	Py_XDECREF(builtin_object);
-	builtin_object = NULL;
+    _PyFrame_ClearFreeList(interp);
+#ifdef Py_DEBUG
+    struct _Py_frame_state *state = &interp->frame;
+    state->numfree = -1;
+#endif
+}
+
+/* Print summary info about the state of the optimized allocator */
+void
+_PyFrame_DebugMallocStats(FILE *out)
+{
+    struct _Py_frame_state *state = get_frame_state();
+    _PyDebugAllocatorStats(out,
+                           "free PyFrameObject",
+                           state->numfree, sizeof(PyFrameObject));
+}
+
+
+PyCodeObject *
+PyFrame_GetCode(PyFrameObject *frame)
+{
+    assert(frame != NULL);
+    PyCodeObject *code = frame->f_code;
+    assert(code != NULL);
+    Py_INCREF(code);
+    return code;
+}
+
+
+PyFrameObject*
+PyFrame_GetBack(PyFrameObject *frame)
+{
+    assert(frame != NULL);
+    PyFrameObject *back = frame->f_back;
+    Py_XINCREF(back);
+    return back;
+}
+
+PyObject*
+_PyEval_BuiltinsFromGlobals(PyThreadState *tstate, PyObject *globals)
+{
+    PyObject *builtins = _PyDict_GetItemIdWithError(globals, &PyId___builtins__);
+    if (builtins) {
+        if (PyModule_Check(builtins)) {
+            builtins = _PyModule_GetDict(builtins);
+            assert(builtins != NULL);
+        }
+        return builtins;
+    }
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
+    return _PyEval_GetBuiltins(tstate);
 }

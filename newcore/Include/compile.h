@@ -1,37 +1,23 @@
-
 #ifndef Py_COMPILE_H
 #define Py_COMPILE_H
-
-#include "code.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Public interface */
-struct _node; /* Declare the existence of this type */
-PyAPI_FUNC(PyCodeObject *) PyNode_Compile(struct _node *, const char *);
+/* These definitions must match corresponding definitions in graminit.h. */
+#define Py_single_input 256
+#define Py_file_input 257
+#define Py_eval_input 258
+#define Py_func_type_input 345
 
-/* Future feature support */
+/* This doesn't need to match anything */
+#define Py_fstring_input 800
 
-typedef struct {
-    int ff_features;      /* flags set by future statements */
-    int ff_lineno;        /* line number of last future statement */
-} PyFutureFeatures;
-
-#define FUTURE_NESTED_SCOPES "nested_scopes"
-#define FUTURE_GENERATORS "generators"
-#define FUTURE_DIVISION "division"
-#define FUTURE_ABSOLUTE_IMPORT "absolute_import"
-#define FUTURE_WITH_STATEMENT "with_statement"
-
-struct _mod; /* Declare the existence of this type */
-PyAPI_FUNC(PyCodeObject *) PyAST_Compile(struct _mod *, const char *,
-					PyCompilerFlags *, PyArena *);
-PyAPI_FUNC(PyFutureFeatures *) PyFuture_FromAST(struct _mod *, const char *);
-
-#define ERR_LATE_FUTURE \
-"from __future__ imports must occur at the beginning of the file"
+#ifndef Py_LIMITED_API
+#  define Py_CPYTHON_COMPILE_H
+#  include "cpython/compile.h"
+#  undef Py_CPYTHON_COMPILE_H
+#endif
 
 #ifdef __cplusplus
 }

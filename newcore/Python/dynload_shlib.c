@@ -1,8 +1,9 @@
-/* Portions Copyright (c) 2007-2009 Nokia Corporation */
 
 /* Support for dynamic loading of extension modules */
 
 #include "Python.h"
+#include "pycore_interp.h"    // _PyInterpreterState.dlopenflags
+#include "pycore_pystate.h"   // _PyInterpreterState_GET()
 #include "importdl.h"
 
 #include <sys/types.h>
@@ -19,10 +20,6 @@
 
 #ifdef HAVE_DLFCN_H
 #include <dlfcn.h>
-#else
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#include "dlfcn.h"
-#endif
 #endif
 
 #if (defined(__OpenBSD__) || defined(__NetBSD__)) && !defined(__ELF__)
@@ -31,160 +28,106 @@
 #define LEAD_UNDERSCORE ""
 #endif
 
+/* The .so extension module ABI tag, supplied by the Makefile via
+   Makefile.pre.in and configure.  This is used to discriminate between
+   incompatible .so files so that extensions for different Python builds can
+   live in the same directory.  E.g. foomodule.cpython-32.so
+*/
 
-const struct filedescr _PyImport_DynLoadFiletab[] = {
+const char *_PyImport_DynLoadFiletab[] = {
 #ifdef __CYGWIN__
-	{".dll", "rb", C_EXTENSION},
-	{"module.dll", "rb", C_EXTENSION},
-#else
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-	{".pyd", "rb", C_EXTENSION},
-	{".dll", "rb", C_EXTENSION},
-#else
-#ifdef __VMS
-        {".exe", "rb", C_EXTENSION},
-        {".EXE", "rb", C_EXTENSION},
-        {"module.exe", "rb", C_EXTENSION},
-        {"MODULE.EXE", "rb", C_EXTENSION},
-#else
-	{".so", "rb", C_EXTENSION},
-	{"module.so", "rb", C_EXTENSION},
+    ".dll",
+#else  /* !__CYGWIN__ */
+    "." SOABI ".so",
+#ifdef ALT_SOABI
+    "." ALT_SOABI ".so",
 #endif
-#endif
-#endif
-	{0, 0}
+    ".abi" PYTHON_ABI_STRING ".so",
+    ".so",
+#endif  /* __CYGWIN__ */
+    NULL,
 };
 
 static struct {
-	dev_t dev;
-#ifdef __VMS
-	ino_t ino[3];
-#else
-	ino_t ino;
-#endif
-	void *handle;
+    dev_t dev;
+    ino_t ino;
+    void *handle;
 } handles[128];
 static int nhandles = 0;
 
-#ifdef SYMBIAN
-struct dll_handle_node
+
+dl_funcptr
+_PyImport_FindSharedFuncptr(const char *prefix,
+                            const char *shortname,
+                            const char *pathname, FILE *fp)
 {
-	void *handle_ptr;
-	struct dll_handle_node *prev;
-};
-struct dll_handle_node *dll_handle_tail_ptr = NULL;
-#endif
+    dl_funcptr p;
+    void *handle;
+    char funcname[258];
+    char pathbuf[260];
+    int dlopenflags=0;
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
-				    const char *pathname, FILE *fp)
-{
-	dl_funcptr p;
-	void *handle;
-	char funcname[258];
-	char pathbuf[260];
-	int dlopenflags=0;
-#ifdef SYMBIAN
-	struct dll_handle_node *new_node;
-#endif
+    if (strchr(pathname, '/') == NULL) {
+        /* Prefix bare filename with "./" */
+        PyOS_snprintf(pathbuf, sizeof(pathbuf), "./%-.255s", pathname);
+        pathname = pathbuf;
+    }
 
-	if (strchr(pathname, '/') == NULL) {
-#ifdef SYMBIAN
-		/* Just the bare filename is sufficient */
-		PyOS_snprintf(pathbuf, sizeof(pathbuf), "%-.255s", pathname);
-#else
-		/* Prefix bare filename with "./" */
-		PyOS_snprintf(pathbuf, sizeof(pathbuf), "./%-.255s", pathname);
-#endif
-		pathname = pathbuf;
-	}
+    PyOS_snprintf(funcname, sizeof(funcname),
+                  LEAD_UNDERSCORE "%.20s_%.200s", prefix, shortname);
 
-#ifdef SYMBIAN
-	/*Symbian uses ordinal numbers to identify funtions*/
-	/*Ordinal number 1 corresponds to init function*/
-	PyOS_snprintf(funcname, sizeof(funcname), "1");
-#else
-	PyOS_snprintf(funcname, sizeof(funcname), 
-		      LEAD_UNDERSCORE "init%.200s", shortname);
-#endif
+    if (fp != NULL) {
+        int i;
+        struct _Py_stat_struct status;
+        if (_Py_fstat(fileno(fp), &status) == -1)
+            return NULL;
+        for (i = 0; i < nhandles; i++) {
+            if (status.st_dev == handles[i].dev &&
+                status.st_ino == handles[i].ino) {
+                p = (dl_funcptr) dlsym(handles[i].handle,
+                                       funcname);
+                return p;
+            }
+        }
+        if (nhandles < 128) {
+            handles[nhandles].dev = status.st_dev;
+            handles[nhandles].ino = status.st_ino;
+        }
+    }
 
-	if (fp != NULL) {
-		int i;
-		struct stat statb;
-		fstat(fileno(fp), &statb);
-		for (i = 0; i < nhandles; i++) {
-			if (statb.st_dev == handles[i].dev &&
-			    statb.st_ino == handles[i].ino) {
-				p = (dl_funcptr) dlsym(handles[i].handle,
-						       funcname);
-				return p;
-			}
-		}
-		if (nhandles < 128) {
-			handles[nhandles].dev = statb.st_dev;
-#ifdef __VMS
-			handles[nhandles].ino[0] = statb.st_ino[0];
-			handles[nhandles].ino[1] = statb.st_ino[1];
-			handles[nhandles].ino[2] = statb.st_ino[2];
-#else
-			handles[nhandles].ino = statb.st_ino;
-#endif
-		}
-	}
+    dlopenflags = _PyInterpreterState_GET()->dlopenflags;
 
-#if !(defined(PYOS_OS2) && defined(PYCC_GCC))
-        dlopenflags = PyThreadState_GET()->interp->dlopenflags;
-#endif
+    handle = dlopen(pathname, dlopenflags);
 
-	if (Py_VerboseFlag)
-		PySys_WriteStderr("dlopen(\"%s\", %x);\n", pathname, 
-				  dlopenflags);
-
-#ifdef __VMS
-	/* VMS currently don't allow a pathname, use a logical name instead */
-	/* Concatenate 'python_module_' and shortname */
-	/* so "import vms.bar" will use the logical python_module_bar */
-	/* As C module use only one name space this is probably not a */
-	/* important limitation */
-	PyOS_snprintf(pathbuf, sizeof(pathbuf), "python_module_%-.200s", 
-		      shortname);
-	pathname = pathbuf;
-#endif
-
-	handle = dlopen(pathname, dlopenflags);
-
-	if (handle == NULL) {
-		const char *error = dlerror();
-		if (error == NULL)
-			error = "unknown dlopen() error";
-		PyErr_SetString(PyExc_ImportError, error);
-		return NULL;
-	}
-#ifdef SYMBIAN
-	else {
-		/* DLLs have to be closed explicitly on Symbian before application close.
-		 * Save the DLL handles in the linked list */
-		new_node = (struct dll_handle_node *) malloc (sizeof(struct dll_handle_node));
-		new_node->prev = dll_handle_tail_ptr;
-		new_node->handle_ptr = handle;
-		dll_handle_tail_ptr = new_node;
-	}
-#endif
-	if (fp != NULL && nhandles < 128)
-		handles[nhandles++].handle = handle;
-	p = (dl_funcptr) dlsym(handle, funcname);
-	return p;
+    if (handle == NULL) {
+        PyObject *mod_name;
+        PyObject *path;
+        PyObject *error_ob;
+        const char *error = dlerror();
+        if (error == NULL)
+            error = "unknown dlopen() error";
+        error_ob = PyUnicode_DecodeLocale(error, "surrogateescape");
+        if (error_ob == NULL)
+            return NULL;
+        mod_name = PyUnicode_FromString(shortname);
+        if (mod_name == NULL) {
+            Py_DECREF(error_ob);
+            return NULL;
+        }
+        path = PyUnicode_DecodeFSDefault(pathname);
+        if (path == NULL) {
+            Py_DECREF(error_ob);
+            Py_DECREF(mod_name);
+            return NULL;
+        }
+        PyErr_SetImportError(error_ob, mod_name, path);
+        Py_DECREF(error_ob);
+        Py_DECREF(mod_name);
+        Py_DECREF(path);
+        return NULL;
+    }
+    if (fp != NULL && nhandles < 128)
+        handles[nhandles++].handle = handle;
+    p = (dl_funcptr) dlsym(handle, funcname);
+    return p;
 }
-
-#ifdef SYMBIAN
-/* Called from Py_Finalize to close all open DLLs */
-void close_dynload_dlls()
-{
-	while (dll_handle_tail_ptr != NULL)
-	{
-		struct dll_handle_node *temp = dll_handle_tail_ptr;
-		dll_handle_tail_ptr = dll_handle_tail_ptr->prev;
-		dlclose(temp->handle_ptr);
-		free(temp);
-	}
-}
-#endif

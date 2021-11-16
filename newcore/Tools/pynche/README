@@ -27,7 +27,7 @@ Introduction
     Pynche must find a text database of colors names in order to
     provide `nearest' color matching.  Pynche is distributed with an
     rgb.txt file from the X11R6.4 distribution for this reason, along
-    with other "Web related" database (see below).  You can use a
+    with other "web related" database (see below).  You can use a
     different file with the -d option.  The file xlicense.txt contains
     the license only for rgb.txt and both files are in the X/
     subdirectory.
@@ -48,7 +48,7 @@ Running Standalone
 
     --initfile file
     -i file
-        Alternate location of the persistent initialization file.  See 
+        Alternate location of the persistent initialization file.  See
         the section on Persistency below.
 
     --ignore
@@ -80,7 +80,7 @@ Running as a Modal Dialog
 
         pyColorChooser.askcolor()
 
-    which will popup Pynche as a modal dialog, and return the selected 
+    which will popup Pynche as a modal dialog, and return the selected
     color.
 
     There are some UI differences when running as a modal
@@ -106,7 +106,7 @@ Running as a Modal Dialog
 
         master[*]
             the master window to use as the parent of the modal
-            dialog.  Without this argument, pyColorChooser will create 
+            dialog.  Without this argument, pyColorChooser will create
             its own Tkinter.Tk instance as the master.  This may not
             be what you want.
 
@@ -170,7 +170,7 @@ The Proof Window
     Selected chip color exactly matches the Nearest chip color, you
     will see the color name appear below the color specification for
     the Selected chip.
-    
+
     Clicking on the Nearest color chip selects that color.  Color
     distance is calculated in the 3D space of the RGB color solid and
     if more than one color name is the same distance from the selected
@@ -356,12 +356,12 @@ Color Name Database Files
 
     html40colors.txt -- the HTML 4.0 guaranteed color names
 
-    websafe.txt -- the 216 "Web-safe" colors that Netscape and MSIE
+    websafe.txt -- the 216 "web-safe" colors that Netscape and MSIE
     guarantee will not be dithered.  These are specified in #rrggbb
     format for both values and names
 
     webcolors.txt -- The 140 color names that Tim Peters and his
-    sister say NS and MSIE both understand (with some controversy over 
+    sister say NS and MSIE both understand (with some controversy over
     AliceBlue).
 
     namedcolors.txt -- an alternative set of Netscape colors.
@@ -369,8 +369,8 @@ Color Name Database Files
     You can switch between files by choosing "Load palette..." from
     the "File" menu.  This brings up a standard Tk file dialog.
     Choose the file you want and then click "Ok".  If Pynche
-    understands the format in this file, it will load the database and 
-    update the appropriate windows.  If not, it will bring up an error 
+    understands the format in this file, it will load the database and
+    update the appropriate windows.  If not, it will bring up an error
     dialog.
 
 

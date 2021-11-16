@@ -1,9 +1,5 @@
-/*****************************************************************
-  This file should be kept compatible with Python 2.3, see PEP 291.
- *****************************************************************/
-
-#if (PY_VERSION_HEX < 0x02050000)
-typedef int Py_ssize_t;
+#if defined (__SVR4) && defined (__sun)
+#   include <alloca.h>
 #endif
 
 #ifndef MS_WIN32
@@ -15,18 +11,10 @@ typedef int Py_ssize_t;
 #define PARAMFLAG_FLCID 0x4
 #endif
 
-/*
-  Backwards compatibility:
-  Python2.2 used LONG_LONG instead of PY_LONG_LONG
-*/
-#if defined(HAVE_LONG_LONG) && !defined(PY_LONG_LONG)
-#define PY_LONG_LONG LONG_LONG
-#endif
-
 typedef struct tagPyCArgObject PyCArgObject;
 typedef struct tagCDataObject CDataObject;
-typedef PyObject *(* GETFUNC)(void *, unsigned size);
-typedef PyObject *(* SETFUNC)(void *, PyObject *value, unsigned size);
+typedef PyObject *(* GETFUNC)(void *, Py_ssize_t size);
+typedef PyObject *(* SETFUNC)(void *, PyObject *value, Py_ssize_t size);
 typedef PyCArgObject *(* PARAMFUNC)(CDataObject *obj);
 
 /* A default buffer in CDataObject, which can be used for small C types.  If
@@ -34,18 +22,17 @@ this buffer is too small, PyMem_Malloc will be called to create a larger one,
 and this one is not used.
 
 Making CDataObject a variable size object would be a better solution, but more
-difficult in the presence of CFuncPtrObject.  Maybe later.
+difficult in the presence of PyCFuncPtrObject.  Maybe later.
 */
 union value {
-		char c[16];
-		short s;
-		int i;
-		long l;
-		float f;
-		double d;
-#ifdef HAVE_LONG_LONG
-		PY_LONG_LONG ll;
-#endif
+                char c[16];
+                short s;
+                int i;
+                long l;
+                float f;
+                double d;
+                long long ll;
+                long double D;
 };
 
 /*
@@ -55,170 +42,179 @@ union value {
 */
 
 struct tagCDataObject {
-	PyObject_HEAD
-	char *b_ptr;		/* pointer to memory block */
-	int  b_needsfree;	/* need _we_ free the memory? */
-	CDataObject *b_base;	/* pointer to base object or NULL */
-	Py_ssize_t b_size;	/* size of memory block in bytes */
-	Py_ssize_t b_length;	/* number of references we need */
-	Py_ssize_t b_index;	/* index of this object into base's
-				   b_object list */
-	PyObject *b_objects;	/* dictionary of references we need to keep, or Py_None */
-	union value b_value;
+    PyObject_HEAD
+    char *b_ptr;                /* pointer to memory block */
+    int  b_needsfree;           /* need _we_ free the memory? */
+    CDataObject *b_base;        /* pointer to base object or NULL */
+    Py_ssize_t b_size;          /* size of memory block in bytes */
+    Py_ssize_t b_length;        /* number of references we need */
+    Py_ssize_t b_index;         /* index of this object into base's
+                               b_object list */
+    PyObject *b_objects;        /* dictionary of references we need to keep, or Py_None */
+    union value b_value;
 };
 
 typedef struct {
-	PyObject_VAR_HEAD
-	ffi_closure *pcl; /* the C callable */
-	ffi_cif cif;
-	PyObject *converters;
-	PyObject *callable;
-	PyObject *restype;
-	SETFUNC setfunc;
-	ffi_type *ffi_restype;
-	ffi_type *atypes[1];
+    PyObject_VAR_HEAD
+    ffi_closure *pcl_write; /* the C callable, writeable */
+    void *pcl_exec;         /* the C callable, executable */
+    ffi_cif cif;
+    int flags;
+    PyObject *converters;
+    PyObject *callable;
+    PyObject *restype;
+    SETFUNC setfunc;
+    ffi_type *ffi_restype;
+    ffi_type *atypes[1];
 } CThunkObject;
-extern PyTypeObject CThunk_Type;
-#define CThunk_CheckExact(v)	    ((v)->ob_type == &CThunk_Type)
+extern PyTypeObject PyCThunk_Type;
+#define CThunk_CheckExact(v)        Py_IS_TYPE(v, &PyCThunk_Type)
 
 typedef struct {
-	/* First part identical to tagCDataObject */
-	PyObject_HEAD
-	char *b_ptr;		/* pointer to memory block */
-	int  b_needsfree;	/* need _we_ free the memory? */
-	CDataObject *b_base;	/* pointer to base object or NULL */
-	Py_ssize_t b_size;	/* size of memory block in bytes */
-	Py_ssize_t b_length;	/* number of references we need */
-	Py_ssize_t b_index;	/* index of this object into base's
-				   b_object list */
-	PyObject *b_objects;	/* list of references we need to keep */
-	union value b_value;
-	/* end of tagCDataObject, additional fields follow */
+    /* First part identical to tagCDataObject */
+    PyObject_HEAD
+    char *b_ptr;                /* pointer to memory block */
+    int  b_needsfree;           /* need _we_ free the memory? */
+    CDataObject *b_base;        /* pointer to base object or NULL */
+    Py_ssize_t b_size;          /* size of memory block in bytes */
+    Py_ssize_t b_length;        /* number of references we need */
+    Py_ssize_t b_index;         /* index of this object into base's
+                               b_object list */
+    PyObject *b_objects;        /* list of references we need to keep */
+    union value b_value;
+    /* end of tagCDataObject, additional fields follow */
 
-	CThunkObject *thunk;
-	PyObject *callable;
+    CThunkObject *thunk;
+    PyObject *callable;
 
-	/* These two fields will override the ones in the type's stgdict if
-	   they are set */
-	PyObject *converters;
-	PyObject *argtypes;
-	PyObject *restype;
-	PyObject *checker;
-	PyObject *errcheck;
+    /* These two fields will override the ones in the type's stgdict if
+       they are set */
+    PyObject *converters;
+    PyObject *argtypes;
+    PyObject *restype;
+    PyObject *checker;
+    PyObject *errcheck;
 #ifdef MS_WIN32
-	int index;
-	GUID *iid;
+    int index;
+    GUID *iid;
 #endif
-	PyObject *paramflags;
-} CFuncPtrObject;
+    PyObject *paramflags;
+} PyCFuncPtrObject;
 
-extern PyTypeObject StgDict_Type;
-#define StgDict_CheckExact(v)	    ((v)->ob_type == &StgDict_Type)
-#define StgDict_Check(v)	    PyObject_TypeCheck(v, &StgDict_Type)
+extern PyTypeObject PyCStgDict_Type;
+#define PyCStgDict_CheckExact(v)            Py_IS_TYPE(v, &PyCStgDict_Type)
+#define PyCStgDict_Check(v)         PyObject_TypeCheck(v, &PyCStgDict_Type)
 
-extern int StructUnionType_update_stgdict(PyObject *fields, PyObject *type, int isStruct);
+extern int PyCStructUnionType_update_stgdict(PyObject *fields, PyObject *type, int isStruct);
 extern int PyType_stginfo(PyTypeObject *self, Py_ssize_t *psize, Py_ssize_t *palign, Py_ssize_t *plength);
 extern int PyObject_stginfo(PyObject *self, Py_ssize_t *psize, Py_ssize_t *palign, Py_ssize_t *plength);
 
 
 
-extern PyTypeObject CData_Type;
-#define CDataObject_CheckExact(v)	((v)->ob_type == &CData_Type)
-#define CDataObject_Check(v)		PyObject_TypeCheck(v, &CData_Type)
+extern PyTypeObject PyCData_Type;
+#define CDataObject_CheckExact(v)       Py_IS_TYPE(v, &PyCData_Type)
+#define CDataObject_Check(v)            PyObject_TypeCheck(v, &PyCData_Type)
+#define _CDataObject_HasExternalBuffer(v)  ((v)->b_ptr != (char *)&(v)->b_value)
 
-extern PyTypeObject SimpleType_Type;
-#define SimpleTypeObject_CheckExact(v)	((v)->ob_type == &SimpleType_Type)
-#define SimpleTypeObject_Check(v)	PyObject_TypeCheck(v, &SimpleType_Type)
+extern PyTypeObject PyCSimpleType_Type;
+#define PyCSimpleTypeObject_CheckExact(v)       Py_IS_TYPE(v, &PyCSimpleType_Type)
+#define PyCSimpleTypeObject_Check(v)    PyObject_TypeCheck(v, &PyCSimpleType_Type)
 
-extern PyTypeObject CField_Type;
-extern struct fielddesc *getentry(char *fmt);
+extern PyTypeObject PyCField_Type;
+extern struct fielddesc *_ctypes_get_fielddesc(const char *fmt);
 
-
-extern PyObject *
-CField_FromDesc(PyObject *desc, int index,
-		int *pfield_size, int bitsize, int *pbitofs,
-		int *psize, int *poffset, int *palign,
-		int pack, int is_big_endian);
-
-extern PyObject *CData_AtAddress(PyObject *type, void *buf);
-extern PyObject *CData_FromBytes(PyObject *type, char *data, Py_ssize_t length);
-
-extern PyTypeObject ArrayType_Type;
-extern PyTypeObject Array_Type;
-extern PyTypeObject PointerType_Type;
-extern PyTypeObject Pointer_Type;
-extern PyTypeObject CFuncPtr_Type;
-extern PyTypeObject CFuncPtrType_Type;
-extern PyTypeObject StructType_Type;
-
-#define ArrayTypeObject_Check(v)	PyObject_TypeCheck(v, &ArrayType_Type)
-#define ArrayObject_Check(v)		PyObject_TypeCheck(v, &Array_Type)
-#define PointerObject_Check(v)		PyObject_TypeCheck(v, &Pointer_Type)
-#define PointerTypeObject_Check(v)	PyObject_TypeCheck(v, &PointerType_Type)
-#define CFuncPtrObject_Check(v)		PyObject_TypeCheck(v, &CFuncPtr_Type)
-#define CFuncPtrTypeObject_Check(v)	PyObject_TypeCheck(v, &CFuncPtrType_Type)
-#define StructTypeObject_Check(v)	PyObject_TypeCheck(v, &StructType_Type)
 
 extern PyObject *
-CreateArrayType(PyObject *itemtype, Py_ssize_t length);
+PyCField_FromDesc(PyObject *desc, Py_ssize_t index,
+                Py_ssize_t *pfield_size, int bitsize, int *pbitofs,
+                Py_ssize_t *psize, Py_ssize_t *poffset, Py_ssize_t *palign,
+                int pack, int is_big_endian);
 
-extern void init_callbacks_in_module(PyObject *m);
+extern PyObject *PyCData_AtAddress(PyObject *type, void *buf);
+extern PyObject *PyCData_FromBytes(PyObject *type, char *data, Py_ssize_t length);
 
-extern PyMethodDef module_methods[];
+extern PyTypeObject PyCArrayType_Type;
+extern PyTypeObject PyCArray_Type;
+extern PyTypeObject PyCPointerType_Type;
+extern PyTypeObject PyCPointer_Type;
+extern PyTypeObject PyCFuncPtr_Type;
+extern PyTypeObject PyCFuncPtrType_Type;
+extern PyTypeObject PyCStructType_Type;
 
-extern CThunkObject *AllocFunctionCallback(PyObject *callable,
-					   PyObject *converters,
-					   PyObject *restype,
-					   int stdcall);
+#define PyCArrayTypeObject_Check(v)     PyObject_TypeCheck(v, &PyCArrayType_Type)
+#define ArrayObject_Check(v)            PyObject_TypeCheck(v, &PyCArray_Type)
+#define PointerObject_Check(v)          PyObject_TypeCheck(v, &PyCPointer_Type)
+#define PyCPointerTypeObject_Check(v)   PyObject_TypeCheck(v, &PyCPointerType_Type)
+#define PyCFuncPtrObject_Check(v)               PyObject_TypeCheck(v, &PyCFuncPtr_Type)
+#define PyCFuncPtrTypeObject_Check(v)   PyObject_TypeCheck(v, &PyCFuncPtrType_Type)
+#define PyCStructTypeObject_Check(v)    PyObject_TypeCheck(v, &PyCStructType_Type)
+
+extern PyObject *
+PyCArrayType_from_ctype(PyObject *itemtype, Py_ssize_t length);
+
+extern PyMethodDef _ctypes_module_methods[];
+
+extern CThunkObject *_ctypes_alloc_callback(PyObject *callable,
+                                           PyObject *converters,
+                                           PyObject *restype,
+                                           int flags);
 /* a table entry describing a predefined ctypes type */
 struct fielddesc {
-	char code;
-	SETFUNC setfunc;
-	GETFUNC getfunc;
-	ffi_type *pffi_type; /* always statically allocated */
-	SETFUNC setfunc_swapped;
-	GETFUNC getfunc_swapped;
+    char code;
+    SETFUNC setfunc;
+    GETFUNC getfunc;
+    ffi_type *pffi_type; /* always statically allocated */
+    SETFUNC setfunc_swapped;
+    GETFUNC getfunc_swapped;
 };
 
 typedef struct {
-	PyObject_HEAD
-	Py_ssize_t offset;
-	Py_ssize_t size;
-	Py_ssize_t index;		/* Index into CDataObject's
-					   object array */
-	PyObject *proto;		/* a type or NULL */
-	GETFUNC getfunc;		/* getter function if proto is NULL */
-	SETFUNC setfunc;		/* setter function if proto is NULL */
-	int anonymous;
+    PyObject_HEAD
+    Py_ssize_t offset;
+    Py_ssize_t size;
+    Py_ssize_t index;                   /* Index into CDataObject's
+                                       object array */
+    PyObject *proto;                    /* a type or NULL */
+    GETFUNC getfunc;                    /* getter function if proto is NULL */
+    SETFUNC setfunc;                    /* setter function if proto is NULL */
+    int anonymous;
 } CFieldObject;
 
 /* A subclass of PyDictObject, used as the instance dictionary of ctypes
    metatypes */
 typedef struct {
-	PyDictObject dict;	/* first part identical to PyDictObject */
+    PyDictObject dict;          /* first part identical to PyDictObject */
 /* The size and align fields are unneeded, they are in ffi_type as well.  As
    an experiment shows, it's trivial to get rid of them, the only thing to
-   remember is that in ArrayType_new the ffi_type fields must be filled in -
+   remember is that in PyCArrayType_new the ffi_type fields must be filled in -
    so far it was unneeded because libffi doesn't support arrays at all
    (because they are passed as pointers to function calls anyway).  But it's
-   too much risk to change that now, and there are other fields which doen't
+   too much risk to change that now, and there are other fields which doesn't
    belong into this structure anyway.  Maybe in ctypes 2.0... (ctypes 2000?)
 */
-	Py_ssize_t size;	/* number of bytes */
-	Py_ssize_t align;	/* alignment requirements */
-	Py_ssize_t length;	/* number of fields */
-	ffi_type ffi_type_pointer;
-	PyObject *proto;	/* Only for Pointer/ArrayObject */
-	SETFUNC setfunc;	/* Only for simple objects */
-	GETFUNC getfunc;	/* Only for simple objects */
-	PARAMFUNC paramfunc;
+    Py_ssize_t size;            /* number of bytes */
+    Py_ssize_t align;           /* alignment requirements */
+    Py_ssize_t length;          /* number of fields */
+    ffi_type ffi_type_pointer;
+    PyObject *proto;            /* Only for Pointer/ArrayObject */
+    SETFUNC setfunc;            /* Only for simple objects */
+    GETFUNC getfunc;            /* Only for simple objects */
+    PARAMFUNC paramfunc;
 
-	/* Following fields only used by CFuncPtrType_Type instances */
-	PyObject *argtypes;	/* tuple of CDataObjects */
-	PyObject *converters;	/* tuple([t.from_param for t in argtypes]) */
-	PyObject *restype;	/* CDataObject or NULL */
-	PyObject *checker;
-	int flags;		/* calling convention and such */
+    /* Following fields only used by PyCFuncPtrType_Type instances */
+    PyObject *argtypes;         /* tuple of CDataObjects */
+    PyObject *converters;       /* tuple([t.from_param for t in argtypes]) */
+    PyObject *restype;          /* CDataObject or NULL */
+    PyObject *checker;
+    int flags;                  /* calling convention and such */
+
+    /* pep3118 fields, pointers need PyMem_Free */
+    char *format;
+    int ndim;
+    Py_ssize_t *shape;
+/*      Py_ssize_t *strides;    */ /* unused in ctypes */
+/*      Py_ssize_t *suboffsets; */ /* unused in ctypes */
+
 } StgDictObject;
 
 /****************************************************************
@@ -239,8 +235,8 @@ typedef struct {
  construction time, or assigns to it later, tp_setattro should update the
  StgDictObject function to a generic one.
 
- Currently, CFuncPtr types have 'converters' and 'checker' entries in their
- type dict.  They are only used to cache attributes from other entries, whihc
+ Currently, PyCFuncPtr types have 'converters' and 'checker' entries in their
+ type dict.  They are only used to cache attributes from other entries, which
  is wrong.
 
  One use case is the .value attribute that all simple types have.  But some
@@ -267,141 +263,111 @@ extern StgDictObject *PyType_stgdict(PyObject *obj);
 /* May return NULL, but does not set an exception! */
 extern StgDictObject *PyObject_stgdict(PyObject *self);
 
-extern int StgDict_clone(StgDictObject *src, StgDictObject *dst);
+extern int PyCStgDict_clone(StgDictObject *src, StgDictObject *dst);
 
 typedef int(* PPROC)(void);
 
-PyObject *_CallProc(PPROC pProc,
-		    PyObject *arguments,
+PyObject *_ctypes_callproc(PPROC pProc,
+                    PyObject *arguments,
 #ifdef MS_WIN32
-		    IUnknown *pIUnk,
-		    GUID *iid,
+                    IUnknown *pIUnk,
+                    GUID *iid,
 #endif
-		    int flags,
-		    PyObject *argtypes,
-		    PyObject *restype,
-		    PyObject *checker);
- 
+                    int flags,
+                    PyObject *argtypes,
+                    PyObject *restype,
+                    PyObject *checker);
+
 
 #define FUNCFLAG_STDCALL 0x0
 #define FUNCFLAG_CDECL   0x1
 #define FUNCFLAG_HRESULT 0x2
 #define FUNCFLAG_PYTHONAPI 0x4
+#define FUNCFLAG_USE_ERRNO 0x8
+#define FUNCFLAG_USE_LASTERROR 0x10
+
+#define TYPEFLAG_ISPOINTER 0x100
+#define TYPEFLAG_HASPOINTER 0x200
+#define TYPEFLAG_HASUNION 0x400
+#define TYPEFLAG_HASBITFIELD 0x800
 
 #define DICTFLAG_FINAL 0x1000
 
 struct tagPyCArgObject {
-	PyObject_HEAD
-	ffi_type *pffi_type;
-	char tag;
-	union {
-		char c;
-		char b;
-		short h;
-		int i;
-		long l;
-#ifdef HAVE_LONG_LONG
-		PY_LONG_LONG q;
-#endif
-		double d;
-		float f;
-		void *p;
-	} value;
-	PyObject *obj;
-	int size; /* for the 'V' tag */
+    PyObject_HEAD
+    ffi_type *pffi_type;
+    char tag;
+    union {
+        char c;
+        char b;
+        short h;
+        int i;
+        long l;
+        long long q;
+        long double D;
+        double d;
+        float f;
+        void *p;
+    } value;
+    PyObject *obj;
+    Py_ssize_t size; /* for the 'V' tag */
 };
 
 extern PyTypeObject PyCArg_Type;
-extern PyCArgObject *new_CArgObject(void);
-#define PyCArg_CheckExact(v)	    ((v)->ob_type == &PyCArg_Type)
-extern PyCArgObject *new_CArgObject(void);
+#define PyCArg_CheckExact(v)        Py_IS_TYPE(v, &PyCArg_Type)
+extern PyCArgObject *PyCArgObject_new(void);
 
 extern PyObject *
-CData_get(PyObject *type, GETFUNC getfunc, PyObject *src,
-	  Py_ssize_t index, Py_ssize_t size, char *ptr);
+PyCData_get(PyObject *type, GETFUNC getfunc, PyObject *src,
+          Py_ssize_t index, Py_ssize_t size, char *ptr);
 
 extern int
-CData_set(PyObject *dst, PyObject *type, SETFUNC setfunc, PyObject *value,
-	  Py_ssize_t index, Py_ssize_t size, char *ptr);
+PyCData_set(PyObject *dst, PyObject *type, SETFUNC setfunc, PyObject *value,
+          Py_ssize_t index, Py_ssize_t size, char *ptr);
 
-extern void Extend_Error_Info(PyObject *exc_class, char *fmt, ...);
+extern void _ctypes_extend_error(PyObject *exc_class, const char *fmt, ...);
 
 struct basespec {
-	CDataObject *base;
-	Py_ssize_t index;
-	char *adr;
+    CDataObject *base;
+    Py_ssize_t index;
+    char *adr;
 };
 
 extern char basespec_string[];
 
-extern ffi_type *GetType(PyObject *obj);
+extern ffi_type *_ctypes_get_ffi_type(PyObject *obj);
 
 /* exception classes */
 extern PyObject *PyExc_ArgError;
 
-extern char *conversion_mode_encoding;
-extern char *conversion_mode_errors;
-
-/* Python 2.4 macros, which are not available in Python 2.3 */
-
-#ifndef Py_CLEAR
-#define Py_CLEAR(op)				\
-        do {                            	\
-                if (op) {			\
-                        PyObject *tmp = (PyObject *)(op);	\
-                        (op) = NULL;		\
-                        Py_DECREF(tmp);		\
-                }				\
-        } while (0)
-#endif
-
-#ifndef Py_VISIT
-/* Utility macro to help write tp_traverse functions.
- * To use this macro, the tp_traverse function must name its arguments
- * "visit" and "arg".  This is intended to keep tp_traverse functions
- * looking as much alike as possible.
- */
-#define Py_VISIT(op)					\
-        do { 						\
-                if (op) {				\
-                        int vret = visit((op), arg);	\
-                        if (vret)			\
-                                return vret;		\
-                }					\
-        } while (0)
-#endif
-
-/* Python's PyUnicode_*WideChar functions are broken ... */
-#if defined(Py_USING_UNICODE) && defined(HAVE_WCHAR_H)
-#  define CTYPES_UNICODE
-#endif
+extern char *_ctypes_conversion_encoding;
+extern char *_ctypes_conversion_errors;
 
 
-#ifdef CTYPES_UNICODE
-#  undef PyUnicode_FromWideChar
-#  define PyUnicode_FromWideChar My_PyUnicode_FromWideChar
+extern void _ctypes_free_closure(void *);
+extern void *_ctypes_alloc_closure(void);
 
-#  undef PyUnicode_AsWideChar
-#  define PyUnicode_AsWideChar My_PyUnicode_AsWideChar
+extern PyObject *PyCData_FromBaseObj(PyObject *type, PyObject *base, Py_ssize_t index, char *adr);
+extern char *_ctypes_alloc_format_string(const char *prefix, const char *suffix);
+extern char *_ctypes_alloc_format_string_with_shape(int ndim,
+                                                const Py_ssize_t *shape,
+                                                const char *prefix, const char *suffix);
 
-extern PyObject *My_PyUnicode_FromWideChar(const wchar_t *, Py_ssize_t);
-extern int My_PyUnicode_AsWideChar(PyUnicodeObject *, wchar_t *, Py_ssize_t);
+extern int _ctypes_simple_instance(PyObject *obj);
 
-#endif
-
-extern void FreeClosure(void *);
-extern void *MallocClosure(void);
-
-extern void _AddTraceback(char *, char *, int);
-
-extern PyObject *CData_FromBaseObj(PyObject *type, PyObject *base, Py_ssize_t index, char *adr);
-
-/* XXX better name needed! */
-extern int IsSimpleSubType(PyObject *obj);
-
+extern PyObject *_ctypes_ptrtype_cache;
+PyObject *_ctypes_get_errobj(int **pspace);
 
 #ifdef MS_WIN32
 extern PyObject *ComError;
+#endif
+
+#if USING_MALLOC_CLOSURE_DOT_C
+void Py_ffi_closure_free(void *p);
+void *Py_ffi_closure_alloc(size_t size, void** codeloc);
+#else
+#define Py_ffi_closure_free ffi_closure_free
+#define Py_ffi_closure_alloc ffi_closure_alloc
 #endif
 
 /*
