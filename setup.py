@@ -14,8 +14,8 @@
 
 import sys
 
-if sys.version_info < (3, 10):
-    print("Python 2.4 or later required.")
+if sys.version_info < (3, 8):
+    print("Python 3.8 or later required.")
     sys.exit(2)
 import os
 from threading import Thread
@@ -25,12 +25,12 @@ import compileall
 import traceback
 import time
 from optparse import OptionParser
-from .tools import fileutil
-from .tools import template_engine
-from .tools.shellutil import *
-from .newcore.Symbian.src import module_config_parser
-from .newcore.Lib.posixfile import _posixfile_
-from .newcore.Lib.idlelib.pyshell import execfile
+from tools import fileutil
+from tools import template_engine
+from tools.shellutil import *
+from newcore.Symbian.src import module_config_parser
+from newcore.Lib.posixfile import _posixfile_
+from newcore.Lib.idlelib.pyshell import execfile
 file = _posixfile_.file
 
 topdir = os.getcwd()
