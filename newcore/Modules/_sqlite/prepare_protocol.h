@@ -1,6 +1,6 @@
 /* prepare_protocol.h - the protocol for preparing values for SQLite
  *
- * Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -23,19 +23,20 @@
 
 #ifndef PYSQLITE_PREPARE_PROTOCOL_H
 #define PYSQLITE_PREPARE_PROTOCOL_H
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
 typedef struct
 {
     PyObject_HEAD
-} SQLitePrepareProtocol;
+} pysqlite_PrepareProtocol;
 
-extern PyTypeObject SQLitePrepareProtocolType;
+extern PyTypeObject pysqlite_PrepareProtocolType;
 
-int prepare_protocol_init(SQLitePrepareProtocol* self, PyObject* args, PyObject* kwargs);
-void prepare_protocol_dealloc(SQLitePrepareProtocol* self);
+int pysqlite_prepare_protocol_init(pysqlite_PrepareProtocol* self, PyObject* args, PyObject* kwargs);
+void pysqlite_prepare_protocol_dealloc(pysqlite_PrepareProtocol* self);
 
-int prepare_protocol_setup_types(void);
+int pysqlite_prepare_protocol_setup_types(void);
 
 #define UNKNOWN (-1)
 #endif

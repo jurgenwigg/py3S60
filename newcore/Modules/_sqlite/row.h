@@ -1,6 +1,6 @@
 /* row.h - an enhanced tuple for database rows
  *
- * Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -23,6 +23,7 @@
 
 #ifndef PYSQLITE_ROW_H
 #define PYSQLITE_ROW_H
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
 typedef struct _Row
@@ -30,10 +31,10 @@ typedef struct _Row
     PyObject_HEAD
     PyObject* data;
     PyObject* description;
-} Row;
+} pysqlite_Row;
 
-extern PyTypeObject RowType;
+extern PyTypeObject pysqlite_RowType;
 
-int row_setup_types(void);
+int pysqlite_row_setup_types(void);
 
 #endif

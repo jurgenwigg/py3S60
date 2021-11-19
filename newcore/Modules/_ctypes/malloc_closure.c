@@ -1,7 +1,3 @@
-/*****************************************************************
-  This file should be kept compatible with Python 2.3, see PEP 291.
- *****************************************************************/
-
 #include <Python.h>
 #include <ffi.h>
 #ifdef MS_WIN32
@@ -27,84 +23,113 @@
 /******************************************************************/
 
 typedef union _tagITEM {
-	ffi_closure closure;
-	union _tagITEM *next;
+    ffi_closure closure;
+    union _tagITEM *next;
 } ITEM;
 
 static ITEM *free_list;
-int _pagesize;
+static int _pagesize;
 
 static void more_core(void)
 {
-	ITEM *item;
-	int count, i;
+    ITEM *item;
+    int count, i;
 
 /* determine the pagesize */
 #ifdef MS_WIN32
-	if (!_pagesize) {
-		SYSTEM_INFO systeminfo;
-		GetSystemInfo(&systeminfo);
-		_pagesize = systeminfo.dwPageSize;
-	}
+    if (!_pagesize) {
+        SYSTEM_INFO systeminfo;
+        GetSystemInfo(&systeminfo);
+        _pagesize = systeminfo.dwPageSize;
+    }
 #else
-	if (!_pagesize) {
-		_pagesize = getpagesize();
-	}
+    if (!_pagesize) {
+#ifdef _SC_PAGESIZE
+        _pagesize = sysconf(_SC_PAGESIZE);
+#else
+        _pagesize = getpagesize();
+#endif
+    }
 #endif
 
-	/* calculate the number of nodes to allocate */
-	count = BLOCKSIZE / sizeof(ITEM);
+    /* calculate the number of nodes to allocate */
+    count = BLOCKSIZE / sizeof(ITEM);
 
-	/* allocate a memory block */
+    /* allocate a memory block */
 #ifdef MS_WIN32
-	item = (ITEM *)VirtualAlloc(NULL,
-					       count * sizeof(ITEM),
-					       MEM_COMMIT,
-					       PAGE_EXECUTE_READWRITE);
-	if (item == NULL)
-		return;
+    item = (ITEM *)VirtualAlloc(NULL,
+                                           count * sizeof(ITEM),
+                                           MEM_COMMIT,
+                                           PAGE_EXECUTE_READWRITE);
+    if (item == NULL)
+        return;
 #else
-	item = (ITEM *)mmap(NULL,
-			    count * sizeof(ITEM),
-			    PROT_READ | PROT_WRITE | PROT_EXEC,
-			    MAP_PRIVATE | MAP_ANONYMOUS,
-			    -1,
-			    0);
-	if (item == (void *)MAP_FAILED)
-		return;
+    item = (ITEM *)mmap(NULL,
+                        count * sizeof(ITEM),
+                        PROT_READ | PROT_WRITE | PROT_EXEC,
+                        MAP_PRIVATE | MAP_ANONYMOUS,
+                        -1,
+                        0);
+    if (item == (void *)MAP_FAILED)
+        return;
 #endif
 
 #ifdef MALLOC_CLOSURE_DEBUG
-	printf("block at %p allocated (%d bytes), %d ITEMs\n",
-	       item, count * sizeof(ITEM), count);
+    printf("block at %p allocated (%d bytes), %d ITEMs\n",
+           item, count * (int)sizeof(ITEM), count);
 #endif
-	/* put them into the free list */
-	for (i = 0; i < count; ++i) {
-		item->next = free_list;
-		free_list = item;
-		++item;
-	}
+    /* put them into the free list */
+    for (i = 0; i < count; ++i) {
+        item->next = free_list;
+        free_list = item;
+        ++item;
+    }
 }
 
 /******************************************************************/
 
 /* put the item back into the free list */
-void FreeClosure(void *p)
+void Py_ffi_closure_free(void *p)
 {
-	ITEM *item = (ITEM *)p;
-	item->next = free_list;
-	free_list = item;
+#if HAVE_FFI_CLOSURE_ALLOC
+#if USING_APPLE_OS_LIBFFI
+    if (__builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *)) {
+#endif
+        ffi_closure_free(p);
+        return;
+#if USING_APPLE_OS_LIBFFI
+    }
+#endif
+#endif
+    ITEM *item = (ITEM *)p;
+    item->next = free_list;
+    free_list = item;
 }
 
 /* return one item from the free list, allocating more if needed */
-void *MallocClosure(void)
+void *Py_ffi_closure_alloc(size_t size, void** codeloc)
 {
-	ITEM *item;
-	if (!free_list)
-		more_core();
-	if (!free_list)
-		return NULL;
-	item = free_list;
-	free_list = item->next;
-	return item;
+#if HAVE_FFI_CLOSURE_ALLOC
+#if USING_APPLE_OS_LIBFFI
+    if (__builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *)) {
+#endif
+        return ffi_closure_alloc(size, codeloc);
+#if USING_APPLE_OS_LIBFFI
+    }
+#endif
+#endif
+    ITEM *item;
+    if (!free_list)
+        more_core();
+    if (!free_list)
+        return NULL;
+    item = free_list;
+    free_list = item->next;
+#ifdef _M_ARM
+    // set Thumb bit so that blx is called correctly
+    *codeloc = (ITEM*)((uintptr_t)item | 1);
+#else
+    *codeloc = (void *)item;
+#endif
+    return (void *)item;
 }

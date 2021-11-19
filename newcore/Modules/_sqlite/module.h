@@ -1,6 +1,6 @@
 /* module.h - definitions for the module
  *
- * Copyright (C) 2004-2006 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2004-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -23,34 +23,30 @@
 
 #ifndef PYSQLITE_MODULE_H
 #define PYSQLITE_MODULE_H
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
-#define PYSQLITE_VERSION "2.3.2"
+#define PYSQLITE_VERSION "2.6.0"
 
-extern PyObject* Error;
-extern PyObject* Warning;
-extern PyObject* InterfaceError;
-extern PyObject* DatabaseError;
-extern PyObject* InternalError;
-extern PyObject* OperationalError;
-extern PyObject* ProgrammingError;
-extern PyObject* IntegrityError;
-extern PyObject* DataError;
-extern PyObject* NotSupportedError;
+extern PyObject* pysqlite_Error;
+extern PyObject* pysqlite_Warning;
+extern PyObject* pysqlite_InterfaceError;
+extern PyObject* pysqlite_DatabaseError;
+extern PyObject* pysqlite_InternalError;
+extern PyObject* pysqlite_OperationalError;
+extern PyObject* pysqlite_ProgrammingError;
+extern PyObject* pysqlite_IntegrityError;
+extern PyObject* pysqlite_DataError;
+extern PyObject* pysqlite_NotSupportedError;
 
-extern PyObject* OptimizedUnicode;
-
-/* the functions time.time() and time.sleep() */
-extern PyObject* time_time;
-extern PyObject* time_sleep;
-
-/* A dictionary, mapping colum types (INTEGER, VARCHAR, etc.) to converter
+/* A dictionary, mapping column types (INTEGER, VARCHAR, etc.) to converter
  * functions, that convert the SQL value to the appropriate Python value.
  * The key is uppercase.
  */
-extern PyObject* converters;
+extern PyObject* _pysqlite_converters;
 
-extern int _enable_callback_tracebacks;
+extern int _pysqlite_enable_callback_tracebacks;
+extern int pysqlite_BaseTypeAdapted;
 
 #define PARSE_DECLTYPES 1
 #define PARSE_COLNAMES 2

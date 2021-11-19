@@ -1,4 +1,4 @@
-bits shared by the stringobject and unicodeobject implementations (and
+bits shared by the bytesobject and unicodeobject implementations (and
 possibly other modules, in a not too distant future).
 
 the stuff in here is included into relevant places; see the individual
@@ -13,11 +13,8 @@ STRINGLIB_CHAR
 
 STRINGLIB_EMPTY
 
-    a PyObject representing the empty string
-
-int STRINGLIB_CMP(STRINGLIB_CHAR*, STRINGLIB_CHAR*, Py_ssize_t)
-
-    compares two strings. returns 0 if they match, and non-zero if not.
+    a PyObject representing the empty string, only to be used if
+    STRINGLIB_MUTABLE is 0
 
 Py_ssize_t STRINGLIB_LEN(PyObject*)
 
@@ -32,3 +29,12 @@ STRINGLIB_CHAR* STRINGLIB_STR(PyObject*)
 
     returns the pointer to the character data for the given string
     object (which must be of the right type)
+
+int STRINGLIB_CHECK_EXACT(PyObject *)
+
+    returns true if the object is an instance of our type, not a subclass
+
+STRINGLIB_MUTABLE
+
+    must be 0 or 1 to tell the cpp macros in stringlib code if the object
+    being operated on is mutable or not

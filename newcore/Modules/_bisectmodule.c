@@ -3,52 +3,69 @@
 Converted to C by Dmitry Vasiliev (dima at hlabs.spb.ru).
 */
 
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
-static int
+_Py_IDENTIFIER(insert);
+
+static inline Py_ssize_t
 internal_bisect_right(PyObject *list, PyObject *item, Py_ssize_t lo, Py_ssize_t hi)
 {
-	PyObject *litem;
-	Py_ssize_t mid, res;
+    PyObject *litem;
+    Py_ssize_t mid;
+    int res;
 
-	if (hi == -1) {
-		hi = PySequence_Size(list);
-		if (hi < 0)
-			return -1;
-	}
-	while (lo < hi) {
-		mid = (lo + hi) / 2;
-		litem = PySequence_GetItem(list, mid);
-		if (litem == NULL)
-			return -1;
-		res = PyObject_RichCompareBool(item, litem, Py_LT);
-		Py_DECREF(litem);
-		if (res < 0)
-			return -1;
-		if (res)
-			hi = mid;
-		else
-			lo = mid + 1;
-	}
-	return lo;
+    if (lo < 0) {
+        PyErr_SetString(PyExc_ValueError, "lo must be non-negative");
+        return -1;
+    }
+    if (hi == -1) {
+        hi = PySequence_Size(list);
+        if (hi < 0)
+            return -1;
+    }
+    while (lo < hi) {
+        /* The (size_t)cast ensures that the addition and subsequent division
+           are performed as unsigned operations, avoiding difficulties from
+           signed overflow.  (See issue 13496.) */
+        mid = ((size_t)lo + hi) / 2;
+        litem = PySequence_GetItem(list, mid);
+        if (litem == NULL)
+            return -1;
+        res = PyObject_RichCompareBool(item, litem, Py_LT);
+        Py_DECREF(litem);
+        if (res < 0)
+            return -1;
+        if (res)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    return lo;
 }
 
 static PyObject *
 bisect_right(PyObject *self, PyObject *args, PyObject *kw)
 {
-	PyObject *list, *item;
-	int lo = 0;
-	int hi = -1;
-	int index;
-	static char *keywords[] = {"a", "x", "lo", "hi", NULL};
+    PyObject *list, *item;
+    Py_ssize_t lo = 0;
+    Py_ssize_t hi = -1;
+    Py_ssize_t index;
+    static char *keywords[] = {"a", "x", "lo", "hi", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|ii:bisect_right",
-		keywords, &list, &item, &lo, &hi))
-		return NULL;
-	index = internal_bisect_right(list, item, lo, hi);
-	if (index < 0)
-		return NULL;
-	return PyInt_FromLong(index);
+    if (kw == NULL && PyTuple_GET_SIZE(args) == 2) {
+        list = PyTuple_GET_ITEM(args, 0);
+        item = PyTuple_GET_ITEM(args, 1);
+    }
+    else {
+        if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|nn:bisect_right",
+                                         keywords, &list, &item, &lo, &hi))
+            return NULL;
+    }
+    index = internal_bisect_right(list, item, lo, hi);
+    if (index < 0)
+        return NULL;
+    return PyLong_FromSsize_t(index);
 }
 
 PyDoc_STRVAR(bisect_right_doc,
@@ -66,30 +83,36 @@ slice of a to be searched.\n");
 static PyObject *
 insort_right(PyObject *self, PyObject *args, PyObject *kw)
 {
-	PyObject *list, *item, *result;
-	int lo = 0;
-	int hi = -1;
-	int index;
-	static char *keywords[] = {"a", "x", "lo", "hi", NULL};
+    PyObject *list, *item, *result;
+    Py_ssize_t lo = 0;
+    Py_ssize_t hi = -1;
+    Py_ssize_t index;
+    static char *keywords[] = {"a", "x", "lo", "hi", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|ii:insort_right",
-		keywords, &list, &item, &lo, &hi))
-		return NULL;
-	index = internal_bisect_right(list, item, lo, hi);
-	if (index < 0)
-		return NULL;
-	if (PyList_Check(list)) {
-		if (PyList_Insert(list, index, item) < 0)
-			return NULL;
-	} else {
-		result = PyObject_CallMethod(list, "insert", "iO",
-					     index, item);
-		if (result == NULL)
-			return NULL;
-		Py_DECREF(result);
-	}
+    if (kw == NULL && PyTuple_GET_SIZE(args) == 2) {
+        list = PyTuple_GET_ITEM(args, 0);
+        item = PyTuple_GET_ITEM(args, 1);
+    }
+    else {
+        if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|nn:insort_right",
+                                         keywords, &list, &item, &lo, &hi))
+            return NULL;
+    }
+    index = internal_bisect_right(list, item, lo, hi);
+    if (index < 0)
+        return NULL;
+    if (PyList_CheckExact(list)) {
+        if (PyList_Insert(list, index, item) < 0)
+            return NULL;
+    }
+    else {
+        result = _PyObject_CallMethodId(list, &PyId_insert, "nO", index, item);
+        if (result == NULL)
+            return NULL;
+        Py_DECREF(result);
+    }
 
-	Py_RETURN_NONE;
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(insort_right_doc,
@@ -102,50 +125,64 @@ If x is already in a, insert it to the right of the rightmost x.\n\
 Optional args lo (default 0) and hi (default len(a)) bound the\n\
 slice of a to be searched.\n");
 
-static int
-internal_bisect_left(PyObject *list, PyObject *item, int lo, int hi)
+static inline Py_ssize_t
+internal_bisect_left(PyObject *list, PyObject *item, Py_ssize_t lo, Py_ssize_t hi)
 {
-	PyObject *litem;
-	int mid, res;
+    PyObject *litem;
+    Py_ssize_t mid;
+    int res;
 
-	if (hi == -1) {
-		hi = PySequence_Size(list);
-		if (hi < 0)
-			return -1;
-	}
-	while (lo < hi) {
-		mid = (lo + hi) / 2;
-		litem = PySequence_GetItem(list, mid);
-		if (litem == NULL)
-			return -1;
-		res = PyObject_RichCompareBool(litem, item, Py_LT);
-		Py_DECREF(litem);
-		if (res < 0)
-			return -1;
-		if (res)
-			lo = mid + 1;
-		else
-			hi = mid;
-	}
-	return lo;
+    if (lo < 0) {
+        PyErr_SetString(PyExc_ValueError, "lo must be non-negative");
+        return -1;
+    }
+    if (hi == -1) {
+        hi = PySequence_Size(list);
+        if (hi < 0)
+            return -1;
+    }
+    while (lo < hi) {
+        /* The (size_t)cast ensures that the addition and subsequent division
+           are performed as unsigned operations, avoiding difficulties from
+           signed overflow.  (See issue 13496.) */
+        mid = ((size_t)lo + hi) / 2;
+        litem = PySequence_GetItem(list, mid);
+        if (litem == NULL)
+            return -1;
+        res = PyObject_RichCompareBool(litem, item, Py_LT);
+        Py_DECREF(litem);
+        if (res < 0)
+            return -1;
+        if (res)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
 }
 
 static PyObject *
 bisect_left(PyObject *self, PyObject *args, PyObject *kw)
 {
-	PyObject *list, *item;
-	int lo = 0;
-	int hi = -1;
-	int index;
-	static char *keywords[] = {"a", "x", "lo", "hi", NULL};
+    PyObject *list, *item;
+    Py_ssize_t lo = 0;
+    Py_ssize_t hi = -1;
+    Py_ssize_t index;
+    static char *keywords[] = {"a", "x", "lo", "hi", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|ii:bisect_left",
-		keywords, &list, &item, &lo, &hi))
-		return NULL;
-	index = internal_bisect_left(list, item, lo, hi);
-	if (index < 0)
-		return NULL;
-	return PyInt_FromLong(index);
+    if (kw == NULL && PyTuple_GET_SIZE(args) == 2) {
+        list = PyTuple_GET_ITEM(args, 0);
+        item = PyTuple_GET_ITEM(args, 1);
+    }
+    else {
+        if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|nn:bisect_left",
+                                         keywords, &list, &item, &lo, &hi))
+            return NULL;
+    }
+    index = internal_bisect_left(list, item, lo, hi);
+    if (index < 0)
+        return NULL;
+    return PyLong_FromSsize_t(index);
 }
 
 PyDoc_STRVAR(bisect_left_doc,
@@ -163,30 +200,34 @@ slice of a to be searched.\n");
 static PyObject *
 insort_left(PyObject *self, PyObject *args, PyObject *kw)
 {
-	PyObject *list, *item, *result;
-	int lo = 0;
-	int hi = -1;
-	int index;
-	static char *keywords[] = {"a", "x", "lo", "hi", NULL};
+    PyObject *list, *item, *result;
+    Py_ssize_t lo = 0;
+    Py_ssize_t hi = -1;
+    Py_ssize_t index;
+    static char *keywords[] = {"a", "x", "lo", "hi", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|ii:insort_left",
-		keywords, &list, &item, &lo, &hi))
-		return NULL;
-	index = internal_bisect_left(list, item, lo, hi);
-	if (index < 0)
-		return NULL;
-	if (PyList_Check(list)) {
-		if (PyList_Insert(list, index, item) < 0)
-			return NULL;
-	} else {
-		result = PyObject_CallMethod(list, "insert", "iO",
-					     index, item);
-		if (result == NULL)
-			return NULL;
-		Py_DECREF(result);
-	}
+    if (kw == NULL && PyTuple_GET_SIZE(args) == 2) {
+        list = PyTuple_GET_ITEM(args, 0);
+        item = PyTuple_GET_ITEM(args, 1);
+    } else {
+        if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|nn:insort_left",
+                                         keywords, &list, &item, &lo, &hi))
+            return NULL;
+    }
+    index = internal_bisect_left(list, item, lo, hi);
+    if (index < 0)
+        return NULL;
+    if (PyList_CheckExact(list)) {
+        if (PyList_Insert(list, index, item) < 0)
+            return NULL;
+    } else {
+        result = _PyObject_CallMethodId(list, &PyId_insert, "nO", index, item);
+        if (result == NULL)
+            return NULL;
+        Py_DECREF(result);
+    }
 
-	Py_RETURN_NONE;
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(insort_left_doc,
@@ -199,23 +240,16 @@ If x is already in a, insert it to the left of the leftmost x.\n\
 Optional args lo (default 0) and hi (default len(a)) bound the\n\
 slice of a to be searched.\n");
 
-PyDoc_STRVAR(bisect_doc, "Alias for bisect_right().\n");
-PyDoc_STRVAR(insort_doc, "Alias for insort_right().\n");
-
 static PyMethodDef bisect_methods[] = {
-	{"bisect_right", (PyCFunction)bisect_right,
-		METH_VARARGS|METH_KEYWORDS, bisect_right_doc},
-	{"bisect", (PyCFunction)bisect_right,
-		METH_VARARGS|METH_KEYWORDS, bisect_doc},
-	{"insort_right", (PyCFunction)insort_right,
-		METH_VARARGS|METH_KEYWORDS, insort_right_doc},
-	{"insort", (PyCFunction)insort_right,
-		METH_VARARGS|METH_KEYWORDS, insort_doc},
-	{"bisect_left", (PyCFunction)bisect_left,
-		METH_VARARGS|METH_KEYWORDS, bisect_left_doc},
-	{"insort_left", (PyCFunction)insort_left,
-		METH_VARARGS|METH_KEYWORDS, insort_left_doc},
-	{NULL, NULL} /* sentinel */
+    {"bisect_right", (PyCFunction)(void(*)(void))bisect_right,
+        METH_VARARGS|METH_KEYWORDS, bisect_right_doc},
+    {"insort_right", (PyCFunction)(void(*)(void))insort_right,
+        METH_VARARGS|METH_KEYWORDS, insort_right_doc},
+    {"bisect_left", (PyCFunction)(void(*)(void))bisect_left,
+        METH_VARARGS|METH_KEYWORDS, bisect_left_doc},
+    {"insort_left", (PyCFunction)(void(*)(void))insort_left,
+        METH_VARARGS|METH_KEYWORDS, insort_left_doc},
+    {NULL, NULL} /* sentinel */
 };
 
 PyDoc_STRVAR(module_doc,
@@ -226,10 +260,21 @@ having to sort the list after each insertion. For long lists of items with\n\
 expensive comparison operations, this can be an improvement over the more\n\
 common approach.\n");
 
-PyMODINIT_FUNC
-init_bisect(void)
-{
-	PyObject *m;
 
-	m = Py_InitModule3("_bisect", bisect_methods, module_doc);
+static struct PyModuleDef _bisectmodule = {
+    PyModuleDef_HEAD_INIT,
+    "_bisect",
+    module_doc,
+    -1,
+    bisect_methods,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyMODINIT_FUNC
+PyInit__bisect(void)
+{
+    return PyModule_Create(&_bisectmodule);
 }

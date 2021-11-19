@@ -13,7 +13,7 @@ redistribution of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 /* !!! !!! !!! This file is edited by the makesetup script !!! !!! !!! */
 
 /* This file contains the table of built-in modules.
-   See init_builtin() in import.c. */
+   See create_builtin() in import.c. */
 
 #include "Python.h"
 
@@ -24,43 +24,44 @@ extern "C" {
 
 /* -- ADDMODULE MARKER 1 -- */
 
-extern void PyMarshal_Init(void);
-extern void initimp(void);
-extern void initgc(void);
-extern void init_ast(void);
-extern void init_types(void);
+extern PyObject* PyMarshal_Init(void);
+extern PyObject* PyInit__imp(void);
+extern PyObject* PyInit_gc(void);
+extern PyObject* PyInit__ast(void);
+extern PyObject* _PyWarnings_Init(void);
+extern PyObject* PyInit__string(void);
 
 struct _inittab _PyImport_Inittab[] = {
 
 /* -- ADDMODULE MARKER 2 -- */
 
-	/* This module lives in marshal.c */
-	{"marshal", PyMarshal_Init},
+    /* This module lives in marshal.c */
+    {"marshal", PyMarshal_Init},
 
-	/* This lives in import.c */
-	{"imp", initimp},
+    /* This lives in import.c */
+    {"_imp", PyInit__imp},
 
-	/* This lives in Python/Python-ast.c */
-	{"_ast", init_ast},
+    /* This lives in Python/Python-ast.c */
+    {"_ast", PyInit__ast},
 
-	/* This lives in Python/_types.c */
-	{"_types", init_types},
+    /* These entries are here for sys.builtin_module_names */
+    {"builtins", NULL},
+    {"sys", NULL},
 
-	/* These entries are here for sys.builtin_module_names */
-	{"__main__", NULL},
-	{"__builtin__", NULL},
-	{"sys", NULL},
-	{"exceptions", NULL},
+    /* This lives in gcmodule.c */
+    {"gc", PyInit_gc},
 
-	/* This lives in gcmodule.c */
-	{"gc", initgc},
+    /* This lives in _warnings.c */
+    {"_warnings", _PyWarnings_Init},
 
-	/* Sentinel */
-	{0, 0}
+    /* This lives in Objects/unicodeobject.c */
+    {"_string", PyInit__string},
+
+    /* Sentinel */
+    {0, 0}
 };
 
 
 #ifdef __cplusplus
 }
 #endif
-
