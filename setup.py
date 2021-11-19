@@ -25,6 +25,13 @@ import compileall
 import traceback
 import time
 from optparse import OptionParser
+from .tools import fileutil
+from .tools import template_engine
+from .tools.shellutil import *
+from .newcore.Symbian.src import module_config_parser
+from .newcore.Lib.posixfile import _posixfile_
+from .newcore.Lib.idlelib.pyshell.ModifiedInterpreter import execfile
+file = _posixfile_.file
 
 topdir = os.getcwd()
 testdata_dir = '.\\build\\test'
@@ -32,11 +39,6 @@ testdir = os.path.abspath(os.path.join(topdir,
                                        '..\\test\\automatic\\standard'))
 sys.path.append(os.path.join(topdir, 'tools'))
 sys.path.append(os.path.join(topdir, 'newcore\\Symbian\\src'))
-
-import fileutil
-import template_engine
-import module_config_parser
-from shellutil import *
 
 internal_proj = False
 
@@ -207,7 +209,7 @@ def run_command_and_check_log(cmd, verbose=1, ignore_errors=0):
         else:
             raise BuildFailedException(
                 f'Command "{cmd}" failed:\n'
-                f'{out["stdout"]}'
+                f'{out["stdout"]}')
 
 
 def enter(dir):
