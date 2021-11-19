@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from StringIO import StringIO
+from io import StringIO
 import re
 import os.path
 import traceback
@@ -25,7 +25,7 @@ def is_templatefile(filename):
 
 def outfilename_from_infilename(infilename):
     if not is_templatefile(infilename):
-        raise ValueError, "expected file name with suffix "+TEMPLATEFILE_SUFFIX+", got "+infilename
+        raise ValueError("expected file name with suffix "+TEMPLATEFILE_SUFFIX+", got "+infilename)
     return infilename[:-len(TEMPLATEFILE_SUFFIX)]
 
 class MacroEvaluationError(Exception): pass
@@ -127,7 +127,7 @@ def process_macros(instr, namespace=None):
             namespace['write']=outstr.write
             m=macro_exec_re.match(macro_expression) # ${{!code}} -- exec the code
             if m:
-                exec m.group(2) in namespace
+                exec(m.group(2) in namespace)
             else:
                 m=macro_if_re.match(macro_expression) # ${{if -- if expression
                 if m:
@@ -137,13 +137,13 @@ def process_macros(instr, namespace=None):
                     if m: # ${{code}}  -- eval the code
                         outstr.write(str(eval(m.group(1),namespace)))
                     else:
-                        raise MacroEvaluationError, 'Invalid macro'
+                        raise MacroEvaluationError('Invalid macro')
             #print 'Macro result: '+repr(outstr.getvalue())
             return outstr.getvalue()
         except:
-            raise MacroEvaluationError, 'Error evaluating expression "%s": %s'%(
+            raise MacroEvaluationError('Error evaluating expression "%s": %s'%(
                 macro_expression,
-                '\n'.join(traceback.format_exception_only(sys.exc_info()[0],sys.exc_info()[1])))
+                '\n'.join(traceback.format_exception_only(sys.exc_info()[0],sys.exc_info()[1]))))
     def if_tokenized(code):
         #print "code: "+repr(code)
         lines=code.split('\n')
@@ -189,10 +189,10 @@ def templatefiles_in_tree(rootdir):
 
 def misctest():
     files=templatefiles_in_tree('.')
-    print "Templates in tree: "+str(files)
+    print("Templates in tree: "+str(files))
 
     for k in files:
-        print "Processing file: "+k
+        print("Processing file: "+k)
         process_file(k,namespace)
     # import code
     # code.interact(None,None,locals())
