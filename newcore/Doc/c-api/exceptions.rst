@@ -100,7 +100,7 @@ For convenience, some of these functions will always return a
    This is the most common way to set the error indicator.  The first argument
    specifies the exception type; it is normally one of the standard exceptions,
    e.g. :c:data:`PyExc_RuntimeError`.  You need not increment its reference count.
-   The second argument is an error message; it is decoded from ``'utf-8'``.
+   The second argument is an error message; it is decoded from ``'utf-8``'.
 
 
 .. c:function:: void PyErr_SetObject(PyObject *type, PyObject *value)
@@ -182,8 +182,8 @@ For convenience, some of these functions will always return a
 .. c:function:: PyObject* PyErr_SetFromErrnoWithFilename(PyObject *type, const char *filename)
 
    Similar to :c:func:`PyErr_SetFromErrnoWithFilenameObject`, but the filename
-   is given as a C string.  *filename* is decoded from the :term:`filesystem
-   encoding and error handler`.
+   is given as a C string.  *filename* is decoded from the filesystem encoding
+   (:func:`os.fsdecode`).
 
 
 .. c:function:: PyObject* PyErr_SetFromWindowsErr(int ierr)
@@ -266,7 +266,7 @@ For convenience, some of these functions will always return a
 .. c:function:: void PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
 
    Like :c:func:`PyErr_SyntaxLocationObject`, but *filename* is a byte string
-   decoded from the :term:`filesystem encoding and error handler`.
+   decoded from the filesystem encoding (:func:`os.fsdecode`).
 
    .. versionadded:: 3.2
 
@@ -343,7 +343,7 @@ an error value).
 
    Similar to :c:func:`PyErr_WarnExplicitObject` except that *message* and
    *module* are UTF-8 encoded strings, and *filename* is decoded from the
-   :term:`filesystem encoding and error handler`.
+   filesystem encoding (:func:`os.fsdecode`).
 
 
 .. c:function:: int PyErr_WarnFormat(PyObject *category, Py_ssize_t stack_level, const char *format, ...)
@@ -373,8 +373,6 @@ Querying the error indicator
    functions or to :c:func:`PyErr_Restore`).  If not set, return ``NULL``.  You do not
    own a reference to the return value, so you do not need to :c:func:`Py_DECREF`
    it.
-
-   The caller must hold the GIL.
 
    .. note::
 
@@ -505,73 +503,29 @@ Signal Handling
       single: SIGINT
       single: KeyboardInterrupt (built-in exception)
 
-   This function interacts with Python's signal handling.
-
-   If the function is called from the main thread and under the main Python
-   interpreter, it checks whether a signal has been sent to the processes
-   and if so, invokes the corresponding signal handler.  If the :mod:`signal`
-   module is supported, this can invoke a signal handler written in Python.
-
-   The function attempts to handle all pending signals, and then returns ``0``.
-   However, if a Python signal handler raises an exception, the error
-   indicator is set and the function returns ``-1`` immediately (such that
-   other pending signals may not have been handled yet: they will be on the
-   next :c:func:`PyErr_CheckSignals()` invocation).
-
-   If the function is called from a non-main thread, or under a non-main
-   Python interpreter, it does nothing and returns ``0``.
-
-   This function can be called by long-running C code that wants to
-   be interruptible by user requests (such as by pressing Ctrl-C).
-
-   .. note::
-      The default Python signal handler for :const:`SIGINT` raises the
-      :exc:`KeyboardInterrupt` exception.
+   This function interacts with Python's signal handling.  It checks whether a
+   signal has been sent to the processes and if so, invokes the corresponding
+   signal handler.  If the :mod:`signal` module is supported, this can invoke a
+   signal handler written in Python.  In all cases, the default effect for
+   :const:`SIGINT` is to raise the  :exc:`KeyboardInterrupt` exception.  If an
+   exception is raised the error indicator is set and the function returns ``-1``;
+   otherwise the function returns ``0``.  The error indicator may or may not be
+   cleared if it was previously set.
 
 
 .. c:function:: void PyErr_SetInterrupt()
 
    .. index::
-      module: signal
       single: SIGINT
       single: KeyboardInterrupt (built-in exception)
 
-   Simulate the effect of a :const:`SIGINT` signal arriving.
-   This is equivalent to ``PyErr_SetInterruptEx(SIGINT)``.
-
-   .. note::
-      This function is async-signal-safe.  It can be called without
-      the :term:`GIL` and from a C signal handler.
-
-
-.. c:function:: int PyErr_SetInterruptEx(int signum)
-
-   .. index::
-      module: signal
-      single: KeyboardInterrupt (built-in exception)
-
-   Simulate the effect of a signal arriving. The next time
+   Simulate the effect of a :const:`SIGINT` signal arriving. The next time
    :c:func:`PyErr_CheckSignals` is called,  the Python signal handler for
-   the given signal number will be called.
+   :const:`SIGINT` will be called.
 
-   This function can be called by C code that sets up its own signal handling
-   and wants Python signal handlers to be invoked as expected when an
-   interruption is requested (for example when the user presses Ctrl-C
-   to interrupt an operation).
-
-   If the given signal isn't handled by Python (it was set to
-   :data:`signal.SIG_DFL` or :data:`signal.SIG_IGN`), it will be ignored.
-
-   If *signum* is outside of the allowed range of signal numbers, ``-1``
-   is returned.  Otherwise, ``0`` is returned.  The error indicator is
-   never changed by this function.
-
-   .. note::
-      This function is async-signal-safe.  It can be called without
-      the :term:`GIL` and from a C signal handler.
-
-   .. versionadded:: 3.10
-
+   If :const:`SIGINT` isn't handled by Python (it was set to
+   :data:`signal.SIG_DFL` or :data:`signal.SIG_IGN`), this function does
+   nothing.
 
 .. c:function:: int PySignal_SetWakeupFd(int fd)
 
@@ -751,8 +705,6 @@ The following functions are used to create and modify Unicode exceptions from C.
    ``0`` on success, ``-1`` on failure.
 
 
-.. _recursion:
-
 Recursion Control
 =================
 
@@ -760,8 +712,6 @@ These two functions provide a way to perform safe recursive calls at the C
 level, both in the core and in extension modules.  They are needed if the
 recursive code does not necessarily invoke Python code (which tracks its
 recursion depth automatically).
-They are also not needed for *tp_call* implementations
-because the :ref:`call protocol <call>` takes care of recursion handling.
 
 .. c:function:: int Py_EnterRecursiveCall(const char *where)
 
@@ -775,20 +725,14 @@ because the :ref:`call protocol <call>` takes care of recursion handling.
    case, a :exc:`RecursionError` is set and a nonzero value is returned.
    Otherwise, zero is returned.
 
-   *where* should be a UTF-8 encoded string such as ``" in instance check"`` to
-   be concatenated to the :exc:`RecursionError` message caused by the recursion
+   *where* should be a string such as ``" in instance check"`` to be
+   concatenated to the :exc:`RecursionError` message caused by the recursion
    depth limit.
 
-   .. versionchanged:: 3.9
-      This function is now also available in the limited API.
-
-.. c:function:: void Py_LeaveRecursiveCall(void)
+.. c:function:: void Py_LeaveRecursiveCall()
 
    Ends a :c:func:`Py_EnterRecursiveCall`.  Must be called once for each
    *successful* invocation of :c:func:`Py_EnterRecursiveCall`.
-
-   .. versionchanged:: 3.9
-      This function is now also available in the limited API.
 
 Properly implementing :c:member:`~PyTypeObject.tp_repr` for container types requires
 special recursion handling.  In addition to protecting the stack,

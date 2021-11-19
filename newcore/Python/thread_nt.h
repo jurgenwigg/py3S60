@@ -1,4 +1,3 @@
-#include "pycore_interp.h"    // _PyInterpreterState.pythread_stacksize
 
 /* This code implemented by Dag.Gruneau@elsa.preseco.comm.se */
 /* Fast NonRecursiveMutex support by Yakov Markovitch, markovitch@iso.ru */
@@ -76,22 +75,16 @@ EnterNonRecursiveMutex(PNRMUTEX mutex, DWORD milliseconds)
         }
     } else if (milliseconds != 0) {
         /* wait at least until the target */
-        _PyTime_t now = _PyTime_GetPerfCounter();
-        if (now <= 0) {
-            Py_FatalError("_PyTime_GetPerfCounter() == 0");
-        }
-        _PyTime_t nanoseconds = _PyTime_FromNanoseconds((_PyTime_t)milliseconds * 1000000);
-        _PyTime_t target = now + nanoseconds;
+        ULONGLONG now, target = GetTickCount64() + milliseconds;
         while (mutex->locked) {
-            _PyTime_t microseconds = _PyTime_AsMicroseconds(nanoseconds, _PyTime_ROUND_TIMEOUT);
-            if (PyCOND_TIMEDWAIT(&mutex->cv, &mutex->cs, microseconds) < 0) {
+            if (PyCOND_TIMEDWAIT(&mutex->cv, &mutex->cs, (long long)milliseconds*1000) < 0) {
                 result = WAIT_FAILED;
                 break;
             }
-            now = _PyTime_GetPerfCounter();
+            now = GetTickCount64();
             if (target <= now)
                 break;
-            nanoseconds = target - now;
+            milliseconds = (DWORD)(target-now);
         }
     }
     if (!mutex->locked) {
@@ -365,13 +358,13 @@ _pythread_nt_set_stacksize(size_t size)
 {
     /* set to default */
     if (size == 0) {
-        _PyInterpreterState_GET()->pythread_stacksize = 0;
+        _PyInterpreterState_GET_UNSAFE()->pythread_stacksize = 0;
         return 0;
     }
 
     /* valid range? */
     if (size >= THREAD_MIN_STACKSIZE && size < THREAD_MAX_STACKSIZE) {
-        _PyInterpreterState_GET()->pythread_stacksize = size;
+        _PyInterpreterState_GET_UNSAFE()->pythread_stacksize = size;
         return 0;
     }
 

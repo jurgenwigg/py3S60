@@ -84,6 +84,13 @@ def task_regex():
     pat = re.compile(r'^(\s*def\s)|(.*(?<!\w)lambda(:|\s))|^(\s*@)', re.MULTILINE)
     with open(__file__, "r") as f:
         arg = f.read(2000)
+
+    def findall(s):
+        t = time.time()
+        try:
+            return pat.findall(s)
+        finally:
+            print(time.time() - t)
     return pat.findall, (arg, )
 
 def task_sort():
@@ -221,7 +228,7 @@ def run_throughput_test(func, args, nthreads):
     for i in range(nthreads):
         threads.append(threading.Thread(target=run))
     for t in threads:
-        t.daemon = True
+        t.setDaemon(True)
         t.start()
     # We don't want measurements to include thread startup overhead,
     # so we arrange for timing to start after all threads are ready.
@@ -328,7 +335,7 @@ def run_latency_test(func, args, nthreads):
         for i in range(nthreads):
             threads.append(threading.Thread(target=run))
         for t in threads:
-            t.daemon = True
+            t.setDaemon(True)
             t.start()
         # Wait for threads to be ready
         with ready_cond:
@@ -460,7 +467,7 @@ def run_bandwidth_test(func, args, nthreads):
             for i in range(nthreads):
                 threads.append(threading.Thread(target=run))
             for t in threads:
-                t.daemon = True
+                t.setDaemon(True)
                 t.start()
             # Wait for threads to be ready
             with ready_cond:
@@ -534,12 +541,10 @@ def main():
                       help="run I/O bandwidth tests")
     parser.add_option("-i", "--interval",
                       action="store", type="int", dest="check_interval", default=None,
-                      help="sys.setcheckinterval() value "
-                           "(Python 3.8 and older)")
+                      help="sys.setcheckinterval() value")
     parser.add_option("-I", "--switch-interval",
                       action="store", type="float", dest="switch_interval", default=None,
-                      help="sys.setswitchinterval() value "
-                           "(Python 3.2 and newer)")
+                      help="sys.setswitchinterval() value")
     parser.add_option("-n", "--num-threads",
                       action="store", type="int", dest="nthreads", default=4,
                       help="max number of threads in tests")

@@ -25,11 +25,13 @@ The :mod:`bz2` module contains:
 * The :func:`compress` and :func:`decompress` functions for one-shot
   (de)compression.
 
+All of the classes in this module may safely be accessed from multiple threads.
+
 
 (De)compression of files
 ------------------------
 
-.. function:: open(filename, mode='rb', compresslevel=9, encoding=None, errors=None, newline=None)
+.. function:: open(filename, mode='r', compresslevel=9, encoding=None, errors=None, newline=None)
 
    Open a bzip2-compressed file in binary or text mode, returning a :term:`file
    object`.
@@ -63,7 +65,7 @@ The :mod:`bz2` module contains:
       Accepts a :term:`path-like object`.
 
 
-.. class:: BZ2File(filename, mode='r', *, compresslevel=9)
+.. class:: BZ2File(filename, mode='r', buffering=None, compresslevel=9)
 
    Open a bzip2-compressed file in binary mode.
 
@@ -78,6 +80,8 @@ The :mod:`bz2` module contains:
 
    If *filename* is a file object (rather than an actual file name), a mode of
    ``'w'`` does not truncate the file, and is instead equivalent to ``'a'``.
+
+   The *buffering* argument is ignored. Its use is deprecated since Python 3.0.
 
    If *mode* is ``'w'`` or ``'a'``, *compresslevel* can be an integer between
    ``1`` and ``9`` specifying the level of compression: ``1`` produces the
@@ -106,6 +110,9 @@ The :mod:`bz2` module contains:
       .. versionadded:: 3.3
 
 
+   .. deprecated:: 3.0
+      The keyword argument *buffering* was deprecated and is now ignored.
+
    .. versionchanged:: 3.1
       Support for the :keyword:`with` statement was added.
 
@@ -130,18 +137,6 @@ The :mod:`bz2` module contains:
 
    .. versionchanged:: 3.6
       Accepts a :term:`path-like object`.
-
-   .. versionchanged:: 3.9
-      The *buffering* parameter has been removed. It was ignored and deprecated
-      since Python 3.0. Pass an open file object to control how the file is
-      opened.
-
-      The *compresslevel* parameter became keyword-only.
-
-   .. versionchanged:: 3.10
-      This class is thread unsafe in the face of multiple simultaneous
-      readers or writers, just like its equivalent classes in :mod:`gzip` and
-      :mod:`lzma` have always been.
 
 
 Incremental (de)compression
@@ -325,8 +320,3 @@ Writing and reading a bzip2-compressed file in binary mode:
     ...     content = f.read()
     >>> content == data  # Check equality to original object after round-trip
     True
-
-.. testcleanup::
-
-   import os
-   os.remove("myfile.bz2")

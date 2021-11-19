@@ -62,7 +62,7 @@ helper, :class:`auto`.
 
 .. class:: auto
 
-    Instances are replaced with an appropriate value for Enum members.  By default, the initial value starts at 1.
+    Instances are replaced with an appropriate value for Enum members. Initial value starts at 1.
 
 .. versionadded:: 3.6  ``Flag``, ``IntFlag``, ``auto``
 
@@ -394,8 +394,8 @@ enumeration, with the exception of special methods (:meth:`__str__`,
 variable names listed in :attr:`_ignore_`.
 
 Note:  if your enumeration defines :meth:`__new__` and/or :meth:`__init__` then
-any value(s) given to the enum member will be passed into those methods.
-See `Planet`_ for an example.
+whatever value(s) were given to the enum member will be passed into those
+methods.  See `Planet`_ for an example.
 
 
 Restricted Enum subclassing
@@ -416,7 +416,7 @@ any members.  So this is forbidden::
     ...
     Traceback (most recent call last):
     ...
-    TypeError: MoreColor: cannot extend enumeration 'Color'
+    TypeError: Cannot extend enumerations
 
 But this is allowed::
 
@@ -741,7 +741,8 @@ Some rules:
 2. While :class:`Enum` can have members of any type, once you mix in an
    additional type, all the members must have values of that type, e.g.
    :class:`int` above.  This restriction does not apply to mix-ins which only
-   add methods and don't specify another type.
+   add methods and don't specify another data type such as :class:`int` or
+   :class:`str`.
 3. When another data type is mixed in, the :attr:`value` attribute is *not the
    same* as the enum member itself, although it is equivalent and will compare
    equal.
@@ -908,7 +909,7 @@ to handle any extra arguments::
     ...     BLEACHED_CORAL = () # New color, no Pantone code yet!
     ...
     >>> Swatch.SEA_GREEN
-    <Swatch.SEA_GREEN>
+    <Swatch.SEA_GREEN: 2>
     >>> Swatch.SEA_GREEN.pantone
     '1246'
     >>> Swatch.BLEACHED_CORAL.pantone
@@ -1090,7 +1091,7 @@ Supported ``_sunder_`` names
 
 - ``_missing_`` -- a lookup function used when a value is not found; may be
   overridden
-- ``_ignore_`` -- a list of names, either as a :class:`list` or a :class:`str`,
+- ``_ignore_`` -- a list of names, either as a :func:`list` or a :func:`str`,
   that will not be transformed into members, and will be removed from the final
   class
 - ``_order_`` -- used in Python 2/3 code to ensure member order is consistent
@@ -1121,15 +1122,6 @@ and raise an error if the two do not match::
     In Python 2 code the :attr:`_order_` attribute is necessary as definition
     order is lost before it can be recorded.
 
-
-_Private__names
-"""""""""""""""
-
-:ref:`Private names <private-name-mangling>` will be normal attributes in Python
-3.11 instead of either an error or a member (depending on if the name ends with
-an underscore). Using these names in 3.10 will issue a :exc:`DeprecationWarning`.
-
-
 ``Enum`` member type
 """"""""""""""""""""
 
@@ -1149,10 +1141,6 @@ all-uppercase names for members)::
     <FieldTypes.size: 2>
     >>> FieldTypes.size.value
     2
-
-.. note::
-
-   This behavior is deprecated and will be removed in 3.12.
 
 .. versionchanged:: 3.5
 
@@ -1182,7 +1170,7 @@ but not of the class::
     >>> dir(Planet)
     ['EARTH', 'JUPITER', 'MARS', 'MERCURY', 'NEPTUNE', 'SATURN', 'URANUS', 'VENUS', '__class__', '__doc__', '__members__', '__module__']
     >>> dir(Planet.EARTH)
-    ['__class__', '__doc__', '__module__', 'mass', 'name', 'radius', 'surface_gravity', 'value']
+    ['__class__', '__doc__', '__module__', 'name', 'surface_gravity', 'value']
 
 
 Combining members of ``Flag``
@@ -1203,10 +1191,4 @@ all named flags and all named combinations of flags that are in the value::
     <Color.YELLOW: 3>
     >>> Color(7)      # not named combination
     <Color.CYAN|MAGENTA|BLUE|YELLOW|GREEN|RED: 7>
-
-.. note::
-
-   In 3.11 unnamed combinations of flags will only produce the canonical flag
-   members (aka single-value flags).  So ``Color(7)`` will produce something
-   like ``<Color.BLUE|GREEN|RED: 7>``.
 

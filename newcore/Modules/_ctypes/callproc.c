@@ -55,7 +55,7 @@
  */
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"
 
 #include <stdbool.h>
 
@@ -162,9 +162,10 @@ _ctypes_get_errobj(int **pspace)
         Py_INCREF(errobj);
     }
     else if (!PyErr_Occurred()) {
-        void *space = PyMem_Calloc(2, sizeof(int));
+        void *space = PyMem_Malloc(sizeof(int) * 2);
         if (space == NULL)
             return NULL;
+        memset(space, 0, sizeof(int) * 2);
         errobj = PyCapsule_New(space, CTYPES_CAPSULE_NAME_PYMEM, pymem_destructor);
         if (errobj == NULL) {
             PyMem_Free(space);
@@ -253,6 +254,8 @@ set_last_error(PyObject *self, PyObject *args)
     }
     return set_error_internal(self, args, 1);
 }
+
+PyObject *ComError;
 
 static WCHAR *FormatError(DWORD code)
 {
@@ -475,7 +478,7 @@ static void
 PyCArg_dealloc(PyCArgObject *self)
 {
     Py_XDECREF(self->obj);
-    PyObject_Free(self);
+    PyObject_Del(self);
 }
 
 static int
@@ -700,6 +703,7 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
         return 0;
     }
 
+#ifdef CTYPES_UNICODE
     if (PyUnicode_Check(obj)) {
         pa->ffi_type = &ffi_type_pointer;
         pa->value.p = PyUnicode_AsWideCharString(obj, NULL);
@@ -712,6 +716,7 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
         }
         return 0;
     }
+#endif
 
     {
         _Py_IDENTIFIER(_as_parameter_);
@@ -740,7 +745,7 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
 #if defined(MS_WIN32) && !defined(_WIN32_WCE)
 /*
 Per: https://msdn.microsoft.com/en-us/library/7572ztz4.aspx
-To be returned by value in RAX, user-defined types must have a length
+To be returned by value in RAX, user-defined types must have a length 
 of 1, 2, 4, 8, 16, 32, or 64 bits
 */
 int can_return_struct_as_int(size_t s)
@@ -834,7 +839,7 @@ static int _call_function_pointer(int flags,
 #      define HAVE_FFI_PREP_CIF_VAR_RUNTIME false
 #   endif
 
-    /* Even on Apple-arm64 the calling convention for variadic functions coincides
+    /* Even on Apple-arm64 the calling convention for variadic functions conincides
      * with the standard calling convention in the case that the function called
      * only with its fixed arguments.   Thus, we do not need a special flag to be
      * set on variadic functions.   We treat a function as variadic if it is called
@@ -990,7 +995,7 @@ static PyObject *GetResult(PyObject *restype, void *result, PyObject *checker)
     if (!checker || !retval)
         return retval;
 
-    v = PyObject_CallOneArg(checker, retval);
+    v = PyObject_CallFunctionObjArgs(checker, retval, NULL);
     if (v == NULL)
         _PyTraceback_Add("GetResult", "_ctypes/callproc.c", __LINE__-2);
     Py_DECREF(retval);
@@ -1198,7 +1203,7 @@ PyObject *_ctypes_callproc(PPROC pProc,
         if (argtypes && argtype_count > i) {
             PyObject *v;
             converter = PyTuple_GET_ITEM(argtypes, i);
-            v = PyObject_CallOneArg(converter, arg);
+            v = PyObject_CallFunctionObjArgs(converter, arg, NULL);
             if (v == NULL) {
                 _ctypes_extend_error(PyExc_ArgError, "argument %zd: ", i+1);
                 goto cleanup;
@@ -1345,6 +1350,7 @@ module. load_flags are as defined for LoadLibraryEx in the\n\
 Windows API.\n";
 static PyObject *load_library(PyObject *self, PyObject *args)
 {
+    const WCHAR *name;
     PyObject *nameobj;
     int load_flags = 0;
     HMODULE hMod;
@@ -1353,13 +1359,13 @@ static PyObject *load_library(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "U|i:LoadLibrary", &nameobj, &load_flags))
         return NULL;
 
+    name = _PyUnicode_AsUnicode(nameobj);
+    if (!name)
+        return NULL;
+
     if (PySys_Audit("ctypes.dlopen", "O", nameobj) < 0) {
         return NULL;
     }
-
-    WCHAR *name = PyUnicode_AsWideCharString(nameobj, NULL);
-    if (!name)
-        return NULL;
 
     Py_BEGIN_ALLOW_THREADS
     /* bpo-36085: Limit DLL search directories to avoid pre-loading
@@ -1369,7 +1375,6 @@ static PyObject *load_library(PyObject *self, PyObject *args)
     err = hMod ? 0 : GetLastError();
     Py_END_ALLOW_THREADS
 
-    PyMem_Free(name);
     if (err == ERROR_MOD_NOT_FOUND) {
         PyErr_Format(PyExc_FileNotFoundError,
                      ("Could not find module '%.500S' (or one of its "
@@ -1477,14 +1482,14 @@ static PyObject *py_dyld_shared_cache_contains_path(PyObject *self, PyObject *ar
 
          if (!PyArg_ParseTuple(args, "O", &name))
              return NULL;
-
+    
          if (name == Py_None)
              Py_RETURN_FALSE;
-
+    
          if (PyUnicode_FSConverter(name, &name2) == 0)
              return NULL;
          name_str = PyBytes_AS_STRING(name2);
-
+    
          r = _dyld_shared_cache_contains_path(name_str);
          Py_DECREF(name2);
 
@@ -1505,7 +1510,7 @@ static PyObject *py_dyld_shared_cache_contains_path(PyObject *self, PyObject *ar
 static PyObject *py_dl_open(PyObject *self, PyObject *args)
 {
     PyObject *name, *name2;
-    const char *name_str;
+    char *name_str;
     void * handle;
 #if HAVE_DECL_RTLD_LOCAL
     int mode = RTLD_NOW | RTLD_LOCAL;
@@ -1829,9 +1834,10 @@ resize(PyObject *self, PyObject *args)
     if (!_CDataObject_HasExternalBuffer(obj)) {
         /* We are currently using the objects default buffer, but it
            isn't large enough any more. */
-        void *ptr = PyMem_Calloc(1, size);
+        void *ptr = PyMem_Malloc(size);
         if (ptr == NULL)
             return PyErr_NoMemory();
+        memset(ptr, 0, size);
         memmove(ptr, obj->b_ptr, obj->b_size);
         obj->b_ptr = ptr;
         obj->b_size = size;
@@ -1855,7 +1861,7 @@ unpickle(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "OO!", &typ, &PyTuple_Type, &state))
         return NULL;
-    obj = _PyObject_CallMethodIdOneArg(typ, &PyId___new__, typ);
+    obj = _PyObject_CallMethodIdObjArgs(typ, &PyId___new__, typ, NULL);
     if (obj == NULL)
         return NULL;
 
@@ -1951,7 +1957,7 @@ pointer(PyObject *self, PyObject *arg)
 
     typ = PyDict_GetItemWithError(_ctypes_ptrtype_cache, (PyObject *)Py_TYPE(arg));
     if (typ) {
-        return PyObject_CallOneArg(typ, arg);
+        return PyObject_CallFunctionObjArgs(typ, arg, NULL);
     }
     else if (PyErr_Occurred()) {
         return NULL;
@@ -1959,7 +1965,7 @@ pointer(PyObject *self, PyObject *arg)
     typ = POINTER(NULL, (PyObject *)Py_TYPE(arg));
     if (typ == NULL)
         return NULL;
-    result = PyObject_CallOneArg(typ, arg);
+    result = PyObject_CallFunctionObjArgs(typ, arg, NULL);
     Py_DECREF(typ);
     return result;
 }

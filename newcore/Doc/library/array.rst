@@ -22,7 +22,7 @@ defined:
 +-----------+--------------------+-------------------+-----------------------+-------+
 | ``'B'``   | unsigned char      | int               | 1                     |       |
 +-----------+--------------------+-------------------+-----------------------+-------+
-| ``'u'``   | wchar_t            | Unicode character | 2                     | \(1)  |
+| ``'u'``   | Py_UNICODE         | Unicode character | 2                     | \(1)  |
 +-----------+--------------------+-------------------+-----------------------+-------+
 | ``'h'``   | signed short       | int               | 2                     |       |
 +-----------+--------------------+-------------------+-----------------------+-------+
@@ -48,15 +48,14 @@ defined:
 Notes:
 
 (1)
-   It can be 16 bits or 32 bits depending on the platform.
+   The ``'u'`` type code corresponds to Python's obsolete unicode character
+   (:c:type:`Py_UNICODE` which is :c:type:`wchar_t`). Depending on the
+   platform, it can be 16 bits or 32 bits.
 
-   .. versionchanged:: 3.9
-      ``array('u')`` now uses ``wchar_t`` as C type instead of deprecated
-      ``Py_UNICODE``. This change doesn't affect to its behavior because
-      ``Py_UNICODE`` is alias of ``wchar_t`` since Python 3.3.
+   ``'u'`` will be removed together with the rest of the :c:type:`Py_UNICODE`
+   API.
 
    .. deprecated-removed:: 3.3 4.0
-
 
 The actual representation of values is determined by the machine architecture
 (strictly speaking, by the C implementation).  The actual size can be accessed
@@ -169,6 +168,13 @@ The following data items and methods are also supported:
    a.append(x)`` except that if there is a type error, the array is unchanged.
 
 
+.. method:: array.fromstring()
+
+   Deprecated alias for :meth:`frombytes`.
+
+   .. deprecated-removed:: 3.2 3.9
+
+
 .. method:: array.fromunicode(s)
 
    Extends this array with data from the given unicode string.  The array must
@@ -177,15 +183,11 @@ The following data items and methods are also supported:
    array of some other type.
 
 
-.. method:: array.index(x[, start[, stop]])
+.. method:: array.index(x)
 
    Return the smallest *i* such that *i* is the index of the first occurrence of
-   *x* in the array.  The optional arguments *start* and *stop* can be
-   specified to search for *x* within a subsection of the array.  Raise
-   :exc:`ValueError` if *x* is not found.
+   *x* in the array.
 
-   .. versionchanged:: 3.10
-      Added optional *start* and *stop* parameters.
 
 .. method:: array.insert(i, x)
 
@@ -230,6 +232,13 @@ The following data items and methods are also supported:
    Convert the array to an ordinary list with the same items.
 
 
+.. method:: array.tostring()
+
+   Deprecated alias for :meth:`tobytes`.
+
+   .. deprecated-removed:: 3.2 3.9
+
+
 .. method:: array.tounicode()
 
    Convert the array to a unicode string.  The array must be a type ``'u'`` array;
@@ -260,6 +269,7 @@ Examples::
       Packing and unpacking of External Data Representation (XDR) data as used in some
       remote procedure call systems.
 
-   `NumPy <https://numpy.org/>`_
-      The NumPy package defines another array type.
+   `The Numerical Python Documentation <https://docs.scipy.org/doc/>`_
+      The Numeric Python extension (NumPy) defines another array type; see
+      http://www.numpy.org/ for further information about Numerical Python.
 

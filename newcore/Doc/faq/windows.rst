@@ -140,8 +140,9 @@ offender.
 How do I make an executable from a Python script?
 -------------------------------------------------
 
-See :ref:`faq-create-standalone-binary` for a list of tools that can be used to
-make executables.
+See `cx_Freeze <https://cx-freeze.readthedocs.io/en/latest/>`_ and
+`py2exe <http://www.py2exe.org/>`_, both are distutils extensions
+that allow you to create console and GUI executables from Python code.
 
 
 Is a ``*.pyd`` file the same as a DLL?

@@ -21,14 +21,14 @@ Tuple Objects
 
 .. c:function:: int PyTuple_Check(PyObject *p)
 
-   Return true if *p* is a tuple object or an instance of a subtype of the
-   tuple type.  This function always succeeds.
+   Return true if *p* is a tuple object or an instance of a subtype of the tuple
+   type.
 
 
 .. c:function:: int PyTuple_CheckExact(PyObject *p)
 
    Return true if *p* is a tuple object, but not an instance of a subtype of the
-   tuple type.  This function always succeeds.
+   tuple type.
 
 
 .. c:function:: PyObject* PyTuple_New(Py_ssize_t len)
@@ -57,7 +57,7 @@ Tuple Objects
 .. c:function:: PyObject* PyTuple_GetItem(PyObject *p, Py_ssize_t pos)
 
    Return the object at position *pos* in the tuple pointed to by *p*.  If *pos* is
-   negative or out of bounds, return ``NULL`` and set an :exc:`IndexError` exception.
+   out of bounds, return ``NULL`` and set an :exc:`IndexError` exception.
 
 
 .. c:function:: PyObject* PyTuple_GET_ITEM(PyObject *p, Py_ssize_t pos)
@@ -109,6 +109,11 @@ Tuple Objects
    this function. If the object referenced by ``*p`` is replaced, the original
    ``*p`` is destroyed.  On failure, returns ``-1`` and sets ``*p`` to ``NULL``, and
    raises :exc:`MemoryError` or :exc:`SystemError`.
+
+
+.. c:function:: int PyTuple_ClearFreeList()
+
+   Clear the free list. Return the total number of freed items.
 
 
 Struct Sequence Objects
@@ -177,12 +182,9 @@ type.
    +-----------+------------------+-----------------------------------------+
 
 
-.. c:var:: const char * const PyStructSequence_UnnamedField
+.. c:var:: char* PyStructSequence_UnnamedField
 
    Special value for a field name to leave it unnamed.
-
-   .. versionchanged:: 3.9
-      The type was changed from ``char *``.
 
 
 .. c:function:: PyObject* PyStructSequence_New(PyTypeObject *type)

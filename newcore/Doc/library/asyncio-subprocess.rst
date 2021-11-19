@@ -62,7 +62,8 @@ Creating Subprocesses
 =====================
 
 .. coroutinefunction:: create_subprocess_exec(program, *args, stdin=None, \
-                          stdout=None, stderr=None, limit=None, **kwds)
+                          stdout=None, stderr=None, loop=None, \
+                          limit=None, **kwds)
 
    Create a subprocess.
 
@@ -77,14 +78,11 @@ Creating Subprocesses
 
    .. deprecated-removed:: 3.8 3.10
 
-      The ``loop`` parameter.  This function has been implicitly getting the
-      current running loop since 3.7.  See
-      :ref:`What's New in 3.10's Removed section <whatsnew310-removed>`
-      for more information.
-
+      The *loop* parameter.
 
 .. coroutinefunction:: create_subprocess_shell(cmd, stdin=None, \
-                          stdout=None, stderr=None, limit=None, **kwds)
+                          stdout=None, stderr=None, loop=None, \
+                          limit=None, **kwds)
 
    Run the *cmd* shell command.
 
@@ -108,10 +106,7 @@ Creating Subprocesses
 
    .. deprecated-removed:: 3.8 3.10
 
-      The ``loop`` parameter.  This function has been implicitly getting the
-      current running loop since 3.7.  See
-      :ref:`What's New in 3.10's Removed section <whatsnew310-removed>`
-      for more information.
+      The *loop* parameter.
 
 .. note::
 

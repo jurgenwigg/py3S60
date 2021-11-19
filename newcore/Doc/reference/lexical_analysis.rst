@@ -316,7 +316,7 @@ The Unicode category codes mentioned above stand for:
 * *Nd* - decimal numbers
 * *Pc* - connector punctuations
 * *Other_ID_Start* - explicit list of characters in `PropList.txt
-  <https://www.unicode.org/Public/13.0.0/ucd/PropList.txt>`_ to support backwards
+  <http://www.unicode.org/Public/12.1.0/ucd/PropList.txt>`_ to support backwards
   compatibility
 * *Other_ID_Continue* - likewise
 
@@ -351,27 +351,6 @@ exactly as written here:
    assert     del        global     not        with
    async      elif       if         or         yield
 
-
-.. _soft-keywords:
-
-Soft Keywords
--------------
-
-.. index:: soft keyword, keyword
-
-.. versionadded:: 3.10
-
-Some identifiers are only reserved under specific contexts. These are known as
-*soft keywords*.  The identifiers ``match``, ``case`` and ``_`` can
-syntactically act as keywords in contexts related to the pattern matching
-statement, but this distinction is done at the parser level, not when
-tokenizing.
-
-As soft keywords, their use with pattern matching is possible while still
-preserving compatibility with existing code that uses ``match``, ``case`` and ``_`` as
-identifier names.
-
-
 .. index::
    single: _, identifiers
    single: __, identifiers
@@ -385,28 +364,16 @@ classes are identified by the patterns of leading and trailing underscore
 characters:
 
 ``_*``
-   Not imported by ``from module import *``.
-
-``_``
-   In a ``case`` pattern within a :keyword:`match` statement, ``_`` is a
-   :ref:`soft keyword <soft-keywords>` that denotes a
-   :ref:`wildcard <wildcard-patterns>`.
-
-   Separately, the interactive interpreter makes the result of the last evaluation
-   available in the variable ``_``.
-   (It is stored in the :mod:`builtins` module, alongside built-in
-   functions like ``print``.)
-
-   Elsewhere, ``_`` is a regular identifier. It is often used to name
-   "special" items, but it is not special to Python itself.
+   Not imported by ``from module import *``.  The special identifier ``_`` is used
+   in the interactive interpreter to store the result of the last evaluation; it is
+   stored in the :mod:`builtins` module.  When not in interactive mode, ``_``
+   has no special meaning and is not defined. See section :ref:`import`.
 
    .. note::
 
       The name ``_`` is often used in conjunction with internationalization;
       refer to the documentation for the :mod:`gettext` module for more
       information on this convention.
-
-      It is also commonly used for unused variables.
 
 ``__*__``
    System-defined names, informally known as "dunder" names. These names are
@@ -751,7 +718,7 @@ Top-level format specifiers may include nested replacement fields. These nested
 fields may include their own conversion fields and :ref:`format specifiers
 <formatspec>`, but may not include more deeply-nested replacement fields. The
 :ref:`format specifier mini-language <formatspec>` is the same as that used by
-the :meth:`str.format` method.
+the string .format() method.
 
 Formatted string literals may be concatenated, but replacement fields
 cannot be split across literals.
@@ -994,4 +961,4 @@ occurrence outside string literals and comments is an unconditional error:
 
 .. rubric:: Footnotes
 
-.. [#] https://www.unicode.org/Public/11.0.0/ucd/NameAliases.txt
+.. [#] http://www.unicode.org/Public/11.0.0/ucd/NameAliases.txt

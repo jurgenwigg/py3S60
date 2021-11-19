@@ -20,7 +20,7 @@ strings up in components (addressing scheme, network location, path etc.), to
 combine the components back into a URL string, and to convert a "relative URL"
 to an absolute URL given a "base URL."
 
-The module has been designed to match the internet RFC on Relative Uniform
+The module has been designed to match the Internet RFC on Relative Uniform
 Resource Locators. It supports the following URL schemes: ``file``, ``ftp``,
 ``gopher``, ``hdl``, ``http``, ``https``, ``imap``, ``mailto``, ``mms``,
 ``news``, ``nntp``, ``prospero``, ``rsync``, ``rtsp``, ``rtspu``, ``sftp``,
@@ -42,8 +42,8 @@ or on combining URL components into a URL string.
    Parse a URL into six components, returning a 6-item :term:`named tuple`.  This
    corresponds to the general structure of a URL:
    ``scheme://netloc/path;parameters?query#fragment``.
-   Each tuple item is a string, possibly empty. The components are not broken up
-   into smaller parts (for example, the network location is a single string), and %
+   Each tuple item is a string, possibly empty. The components are not broken up in
+   smaller parts (for example, the network location is a single string), and %
    escapes are not expanded. The delimiters as shown above are not part of the
    result, except for a leading slash in the *path* component, which is retained if
    present.  For example:
@@ -153,7 +153,7 @@ or on combining URL components into a URL string.
 
    .. versionchanged:: 3.3
       The fragment is now parsed for all URL schemes (unless *allow_fragment* is
-      false), in accordance with :rfc:`3986`.  Previously, an allowlist of
+      false), in accordance with :rfc:`3986`.  Previously, a whitelist of
       schemes that support fragments existed.
 
    .. versionchanged:: 3.6
@@ -204,9 +204,9 @@ or on combining URL components into a URL string.
    .. versionchanged:: 3.8
       Added *max_num_fields* parameter.
 
-   .. versionchanged:: 3.10
+   .. versionchanged:: 3.8.8
       Added *separator* parameter with the default value of ``&``. Python
-      versions earlier than Python 3.10 allowed using both ``;`` and ``&`` as
+      versions earlier than Python 3.8.8 allowed using both ``;`` and ``&`` as
       query parameter separator. This has been changed to allow only a single
       separator key, with ``&`` as the default separator.
 
@@ -247,9 +247,9 @@ or on combining URL components into a URL string.
    .. versionchanged:: 3.8
       Added *max_num_fields* parameter.
 
-   .. versionchanged:: 3.10
+   .. versionchanged:: 3.8.8
       Added *separator* parameter with the default value of ``&``. Python
-      versions earlier than Python 3.10 allowed using both ``;`` and ``&`` as
+      versions earlier than Python 3.8.8 allowed using both ``;`` and ``&`` as
       query parameter separator. This has been changed to allow only a single
       separator key, with ``&`` as the default separator.
 
@@ -323,7 +323,7 @@ or on combining URL components into a URL string.
       Characters that affect netloc parsing under NFKC normalization will
       now raise :exc:`ValueError`.
 
-   .. versionchanged:: 3.10
+   .. versionchanged:: 3.8.10
       ASCII newline and tab characters are stripped from the URL.
 
 .. _WHATWG spec: https://url.spec.whatwg.org/#concept-basic-url-parser
@@ -353,22 +353,22 @@ or on combining URL components into a URL string.
 
    .. note::
 
-      If *url* is an absolute URL (that is, it starts with ``//`` or ``scheme://``),
-      the *url*'s hostname and/or scheme will be present in the result.  For example:
+      If *url* is an absolute URL (that is, starting with ``//`` or ``scheme://``),
+      the *url*'s host name and/or scheme will be present in the result.  For example:
 
-      .. doctest::
+   .. doctest::
 
-         >>> urljoin('http://www.cwi.nl/%7Eguido/Python.html',
-         ...         '//www.python.org/%7Eguido')
-         'http://www.python.org/%7Eguido'
+      >>> urljoin('http://www.cwi.nl/%7Eguido/Python.html',
+      ...         '//www.python.org/%7Eguido')
+      'http://www.python.org/%7Eguido'
 
-      If you do not want that behavior, preprocess the *url* with :func:`urlsplit` and
-      :func:`urlunsplit`, removing possible *scheme* and *netloc* parts.
+   If you do not want that behavior, preprocess the *url* with :func:`urlsplit` and
+   :func:`urlunsplit`, removing possible *scheme* and *netloc* parts.
 
 
    .. versionchanged:: 3.5
 
-      Behavior updated to match the semantics defined in :rfc:`3986`.
+      Behaviour updated to match the semantics defined in :rfc:`3986`.
 
 
 .. function:: urldefrag(url)
@@ -546,11 +546,11 @@ task isn't already covered by the URL parsing functions above.
 
    Replace special characters in *string* using the ``%xx`` escape. Letters,
    digits, and the characters ``'_.-~'`` are never quoted. By default, this
-   function is intended for quoting the path section of a URL. The optional
-   *safe* parameter specifies additional ASCII characters that should not be
-   quoted --- its default value is ``'/'``.
+   function is intended for quoting the path section of URL. The optional *safe*
+   parameter specifies additional ASCII characters that should not be quoted
+   --- its default value is ``'/'``.
 
-   *string* may be either a :class:`str` or a :class:`bytes` object.
+   *string* may be either a :class:`str` or a :class:`bytes`.
 
    .. versionchanged:: 3.7
       Moved from :rfc:`2396` to :rfc:`3986` for quoting URL strings. "~" is now
@@ -572,7 +572,7 @@ task isn't already covered by the URL parsing functions above.
 
 .. function:: quote_plus(string, safe='', encoding=None, errors=None)
 
-   Like :func:`quote`, but also replace spaces with plus signs, as required for
+   Like :func:`quote`, but also replace spaces by plus signs, as required for
    quoting HTML form values when building up a query string to go into a URL.
    Plus signs in the original string are escaped unless they are included in
    *safe*.  It also does not have *safe* default to ``'/'``.
@@ -591,12 +591,12 @@ task isn't already covered by the URL parsing functions above.
 
 .. function:: unquote(string, encoding='utf-8', errors='replace')
 
-   Replace ``%xx`` escapes with their single-character equivalent.
+   Replace ``%xx`` escapes by their single-character equivalent.
    The optional *encoding* and *errors* parameters specify how to decode
    percent-encoded sequences into Unicode characters, as accepted by the
    :meth:`bytes.decode` method.
 
-   *string* may be either a :class:`str` or a :class:`bytes` object.
+   *string* must be a :class:`str`.
 
    *encoding* defaults to ``'utf-8'``.
    *errors* defaults to ``'replace'``, meaning invalid sequences are replaced
@@ -604,16 +604,11 @@ task isn't already covered by the URL parsing functions above.
 
    Example: ``unquote('/El%20Ni%C3%B1o/')`` yields ``'/El Niño/'``.
 
-   .. versionchanged:: 3.9
-      *string* parameter supports bytes and str objects (previously only str).
-
-
-
 
 .. function:: unquote_plus(string, encoding='utf-8', errors='replace')
 
-   Like :func:`unquote`, but also replace plus signs with spaces, as required
-   for unquoting HTML form values.
+   Like :func:`unquote`, but also replace plus signs by spaces, as required for
+   unquoting HTML form values.
 
    *string* must be a :class:`str`.
 
@@ -622,10 +617,10 @@ task isn't already covered by the URL parsing functions above.
 
 .. function:: unquote_to_bytes(string)
 
-   Replace ``%xx`` escapes with their single-octet equivalent, and return a
+   Replace ``%xx`` escapes by their single-octet equivalent, and return a
    :class:`bytes` object.
 
-   *string* may be either a :class:`str` or a :class:`bytes` object.
+   *string* may be either a :class:`str` or a :class:`bytes`.
 
    If it is a :class:`str`, unescaped non-ASCII characters in *string*
    are encoded into UTF-8 bytes.
@@ -656,7 +651,7 @@ task isn't already covered by the URL parsing functions above.
    When a sequence of two-element tuples is used as the *query*
    argument, the first element of each tuple is a key and the second is a
    value. The value element in itself can be a sequence and in that case, if
-   the optional parameter *doseq* evaluates to ``True``, individual
+   the optional parameter *doseq* is evaluates to ``True``, individual
    ``key=value`` pairs separated by ``'&'`` are generated for each element of
    the value sequence for the key.  The order of parameters in the encoded
    string will match the order of parameter tuples in the sequence.
@@ -668,12 +663,11 @@ task isn't already covered by the URL parsing functions above.
    To reverse this encoding process, :func:`parse_qs` and :func:`parse_qsl` are
    provided in this module to parse query strings into Python data structures.
 
-   Refer to :ref:`urllib examples <urllib-examples>` to find out how the
-   :func:`urllib.parse.urlencode` method can be used for generating the query
-   string of a URL or data for a POST request.
+   Refer to :ref:`urllib examples <urllib-examples>` to find out how urlencode
+   method can be used for generating query string for a URL or data for POST.
 
    .. versionchanged:: 3.2
-      *query* supports bytes and string objects.
+      Query parameter supports bytes and string objects.
 
    .. versionadded:: 3.5
       *quote_via* parameter.

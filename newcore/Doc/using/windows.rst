@@ -23,8 +23,8 @@ available for application-local distributions.
 
 As specified in :pep:`11`, a Python release only supports a Windows platform
 while Microsoft considers the platform under extended support. This means that
-Python |version| supports Windows 8.1 and newer. If you require Windows 7
-support, please install Python 3.8.
+Python |version| supports Windows Vista and newer. If you require Windows XP
+support then please install Python 3.4.
 
 There are a number of different installers available for Windows, each with
 certain benefits and downsides.
@@ -212,13 +212,13 @@ of available options is shown below.
 For example, to silently install a default, system-wide Python installation,
 you could use the following command (from an elevated command prompt)::
 
-    python-3.9.0.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+    python-3.8.0.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 
 To allow users to easily install a personal copy of Python without the test
 suite, you could provide a shortcut with the following command. This will
 display a simplified initial page and disallow customization::
 
-    python-3.9.0.exe InstallAllUsers=0 Include_launcher=0 Include_test=0
+    python-3.8.0.exe InstallAllUsers=0 Include_launcher=0 Include_test=0
         SimpleInstall=1 SimpleInstallDescription="Just for me, no test suite."
 
 (Note that omitting the launcher also omits file associations, and is only
@@ -255,13 +255,13 @@ where a large number of installations are going to be performed it is very
 useful to have a locally cached copy.
 
 Execute the following command from Command Prompt to download all possible
-required files.  Remember to substitute ``python-3.9.0.exe`` for the actual
+required files.  Remember to substitute ``python-3.8.0.exe`` for the actual
 name of your installer, and to create layouts in their own directories to
 avoid collisions between files with the same name.
 
 ::
 
-    python-3.9.0.exe /layout [optional target directory]
+    python-3.8.0.exe /layout [optional target directory]
 
 You may also specify the ``/quiet`` option to hide the progress display.
 
@@ -427,6 +427,12 @@ dependants, such as Idle), pip and the Python documentation are not included.
     automatically via Windows Update, and can be detected by finding
     ``ucrtbase.dll`` in the system directory.
 
+.. note::
+
+   When running on Windows 7, Python 3.8 requires the KB2533623 update to be
+   installed. The embeddable distribution does not detect this update, and may
+   fail at runtime. Later versions of Windows include this update.
+
 Third-party packages should be installed by the application installer alongside
 the embedded distribution. Using pip to manage dependencies as for a regular
 Python installation is not supported with this distribution, though with some
@@ -530,7 +536,7 @@ To temporarily set environment variables, open Command Prompt and use the
 
 .. code-block:: doscon
 
-    C:\>set PATH=C:\Program Files\Python 3.9;%PATH%
+    C:\>set PATH=C:\Program Files\Python 3.8;%PATH%
     C:\>set PYTHONPATH=%PYTHONPATH%;C:\My_python_lib
     C:\>python
 
@@ -603,7 +609,7 @@ of your Python installation, delimited by a semicolon from other entries.  An
 example variable could look like this (assuming the first two entries already
 existed)::
 
-    C:\WINDOWS\system32;C:\WINDOWS;C:\Program Files\Python 3.9
+    C:\WINDOWS\system32;C:\WINDOWS;C:\Program Files\Python 3.8
 
 .. _win-utf8-mode:
 
@@ -619,14 +625,21 @@ Page).  Python uses it for the default encoding of text files (e.g.
 This may cause issues because UTF-8 is widely used on the internet
 and most Unix systems, including WSL (Windows Subsystem for Linux).
 
-You can use the :ref:`Python UTF-8 Mode <utf8-mode>` to change the default text
-encoding to UTF-8. You can enable the :ref:`Python UTF-8 Mode <utf8-mode>` via
-the ``-X utf8`` command line option, or the ``PYTHONUTF8=1`` environment
-variable.  See :envvar:`PYTHONUTF8` for enabling UTF-8 mode, and
-:ref:`setting-envvars` for how to modify environment variables.
+You can use UTF-8 mode to change the default text encoding to UTF-8.
+You can enable UTF-8 mode via the ``-X utf8`` command line option, or
+the ``PYTHONUTF8=1`` environment variable.  See :envvar:`PYTHONUTF8` for
+enabling UTF-8 mode, and :ref:`setting-envvars` for how to modify
+environment variables.
 
-When the :ref:`Python UTF-8 Mode <utf8-mode>` is enabled, you can still use the
-system encoding (the ANSI Code Page) via the "mbcs" codec.
+When UTF-8 mode is enabled:
+
+* :func:`locale.getpreferredencoding` returns ``'UTF-8'`` instead of
+  the system encoding.  This function is used for the default text
+  encoding in many places, including :func:`open`, :class:`Popen`,
+  :meth:`Path.read_text`, etc.
+* :data:`sys.stdin`, :data:`sys.stdout`, and :data:`sys.stderr`
+  all use UTF-8 as their text encoding.
+* You can still use the system encoding via the "mbcs" codec.
 
 Note that adding ``PYTHONUTF8=1`` to the default environment variables
 will affect all Python 3.7+ applications on your system.
@@ -639,8 +652,7 @@ temporarily or use the ``-X utf8`` command line option.
    on Windows for:
 
    * Console I/O including standard I/O (see :pep:`528` for details).
-   * The :term:`filesystem encoding <filesystem encoding and error handler>`
-     (see :pep:`529` for details).
+   * The filesystem encoding (see :pep:`529` for details).
 
 
 .. _launcher:

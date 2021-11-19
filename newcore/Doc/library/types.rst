@@ -103,13 +103,6 @@ If you instantiate any of these types, note that signatures may vary between Pyt
 
 Standard names are defined for the following types:
 
-.. data:: NoneType
-
-   The type of :data:`None`.
-
-   .. versionadded:: 3.10
-
-
 .. data:: FunctionType
           LambdaType
 
@@ -199,13 +192,6 @@ Standard names are defined for the following types:
    .. versionadded:: 3.7
 
 
-.. data:: NotImplementedType
-
-   The type of :data:`NotImplemented`.
-
-   .. versionadded:: 3.10
-
-
 .. data:: MethodDescriptorType
 
    The type of methods of some built-in data types such as :meth:`str.join`.
@@ -243,7 +229,7 @@ Standard names are defined for the following types:
 
       .. note::
          A future version of Python may stop setting this attribute by default.
-         To guard against this potential change, preferably read from the
+         To guard against this potential change, preferrably read from the
          :attr:`__spec__` attribute instead or use
          ``getattr(module, "__loader__", None)`` if you explicitly need to use
          this attribute.
@@ -268,7 +254,7 @@ Standard names are defined for the following types:
 
       .. note::
          A future version of Python may stop setting this attribute by default.
-         To guard against this potential change, preferably read from the
+         To guard against this potential change, preferrably read from the
          :attr:`__spec__` attribute instead or use
          ``getattr(module, "__package__", None)`` if you explicitly need to use
          this attribute.
@@ -278,45 +264,11 @@ Standard names are defined for the following types:
 
    .. attribute:: __spec__
 
-      A record of the module's import-system-related state. Expected to be an
-      instance of :class:`importlib.machinery.ModuleSpec`.
+      A record of the the module's import-system-related state. Expected to be
+      an instance of :class:`importlib.machinery.ModuleSpec`.
 
       .. versionadded:: 3.4
 
-
-.. data:: EllipsisType
-
-   The type of :data:`Ellipsis`.
-
-   .. versionadded:: 3.10
-
-.. class:: GenericAlias(t_origin, t_args)
-
-   The type of :ref:`parameterized generics <types-genericalias>` such as
-   ``list[int]``.
-
-   ``t_origin`` should be a non-parameterized generic class, such as ``list``,
-   ``tuple`` or ``dict``.  ``t_args`` should be a :class:`tuple` (possibly of
-   length 1) of types which parameterize ``t_origin``::
-
-      >>> from types import GenericAlias
-
-      >>> list[int] == GenericAlias(list, (int,))
-      True
-      >>> dict[str, int] == GenericAlias(dict, (str, int))
-      True
-
-   .. versionadded:: 3.9
-
-   .. versionchanged:: 3.9.2
-      This type can now be subclassed.
-
-
-.. data:: UnionType
-
-   The type of :ref:`union type expressions<types-union>`.
-
-   .. versionadded:: 3.10
 
 .. class:: TracebackType(tb_next, tb_frame, tb_lasti, tb_lineno)
 
@@ -364,11 +316,6 @@ Standard names are defined for the following types:
 
    .. versionadded:: 3.3
 
-   .. versionchanged:: 3.9
-
-      Updated to support the new union (``|``) operator from :pep:`584`, which
-      simply delegates to the underlying mapping.
-
    .. describe:: key in proxy
 
       Return ``True`` if the underlying mapping has a key *key*, else
@@ -411,12 +358,6 @@ Standard names are defined for the following types:
 
       Return a new view of the underlying mapping's values.
 
-   .. describe:: reversed(proxy)
-
-      Return a reverse iterator over the keys of the underlying mapping.
-
-      .. versionadded:: 3.9
-
 
 Additional Utility Classes and Functions
 ----------------------------------------
@@ -437,7 +378,8 @@ Additional Utility Classes and Functions
                self.__dict__.update(kwargs)
 
            def __repr__(self):
-               items = (f"{k}={v!r}" for k, v in self.__dict__.items())
+               keys = sorted(self.__dict__)
+               items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
                return "{}({})".format(type(self).__name__, ", ".join(items))
 
            def __eq__(self, other):
@@ -451,9 +393,6 @@ Additional Utility Classes and Functions
 
    .. versionadded:: 3.3
 
-   .. versionchanged:: 3.9
-      Attribute order in the repr changed from alphabetical to insertion (like
-      ``dict``).
 
 .. function:: DynamicClassAttribute(fget=None, fset=None, fdel=None, doc=None)
 
@@ -465,7 +404,7 @@ Additional Utility Classes and Functions
    class's __getattr__ method; this is done by raising AttributeError.
 
    This allows one to have properties active on an instance, and have virtual
-   attributes on the class with the same name (see :class:`enum.Enum` for an example).
+   attributes on the class with the same name (see Enum for an example).
 
    .. versionadded:: 3.4
 

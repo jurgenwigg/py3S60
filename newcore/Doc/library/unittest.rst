@@ -331,9 +331,8 @@ the `load_tests protocol`_.
 
 .. versionchanged:: 3.4
    Test discovery supports :term:`namespace packages <namespace package>`
-   for the start directory. Note that you need to specify the top level
-   directory too (e.g.
-   ``python -m unittest discover -s root/namespace -t root``).
+   for start directory. Note that you need to the top level directory too.
+   (e.g. ``python -m unittest discover -s root/namespace -t root``).
 
 
 .. _organizing-tests:
@@ -597,9 +596,8 @@ The following decorators and exception implement test skipping and expected fail
 .. decorator:: expectedFailure
 
    Mark the test as an expected failure or error.  If the test fails or errors
-   in the test function itself (rather than in one of the :dfn:`test fixture`
-   methods) then it will be considered a success.  If the test passes, it will
-   be considered a failure.
+   it will be considered a success.  If the test passes, it will be considered
+   a failure.
 
 .. exception:: SkipTest(reason)
 
@@ -954,9 +952,6 @@ Test cases
    | :meth:`assertLogs(logger, level)                        | The ``with`` block logs on *logger*  | 3.4        |
    | <TestCase.assertLogs>`                                  | with minimum *level*                 |            |
    +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertNoLogs(logger, level)                      | The ``with`` block does not log on   | 3.10       |
-   | <TestCase.assertNoLogs>`                                |  *logger* with minimum *level*       |            |
-   +---------------------------------------------------------+--------------------------------------+------------+
 
    .. method:: assertRaises(exception, callable, *args, **kwds)
                assertRaises(exception, *, msg=None)
@@ -1129,24 +1124,6 @@ Test cases
 
       .. versionadded:: 3.4
 
-   .. method:: assertNoLogs(logger=None, level=None)
-
-      A context manager to test that no messages are logged on
-      the *logger* or one of its children, with at least the given
-      *level*.
-
-      If given, *logger* should be a :class:`logging.Logger` object or a
-      :class:`str` giving the name of a logger.  The default is the root
-      logger, which will catch all messages.
-
-      If given, *level* should be either a numeric logging level or
-      its string equivalent (for example either ``"ERROR"`` or
-      :attr:`logging.ERROR`).  The default is :attr:`logging.INFO`.
-
-      Unlike :meth:`assertLogs`, nothing will be returned by the context
-      manager.
-
-      .. versionadded:: 3.10
 
    There are also other methods used to perform more specific checks, such as:
 
@@ -1453,7 +1430,7 @@ Test cases
          :class:`TextTestResult` in Python 3.2.
 
 
-   .. method:: addCleanup(function, /, *args, **kwargs)
+   .. method:: addCleanup(function, *args, **kwargs)
 
       Add a function to be called after :meth:`tearDown` to cleanup resources
       used during the test. Functions will be called in reverse order to the

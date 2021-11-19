@@ -34,7 +34,6 @@ echo.      automatically by the pythoncore project)
 echo.  --pgo          Build with Profile-Guided Optimization.  This flag
 echo.                 overrides -c and -d
 echo.  --test-marker  Enable the test marker within the build.
-echo.  --regen        Regenerate all opcodes, grammar and tokens.
 echo.
 echo.Available flags to avoid building certain modules.
 echo.These flags have no effect if '-e' is not given:
@@ -46,7 +45,7 @@ echo.Available arguments:
 echo.  -c Release ^| Debug ^| PGInstrument ^| PGUpdate
 echo.     Set the configuration (default: Release)
 echo.  -p x64 ^| Win32 ^| ARM ^| ARM64
-echo.     Set the platform (default: x64)
+echo.     Set the platform (default: Win32)
 echo.  -t Build ^| Rebuild ^| Clean ^| CleanAll
 echo.     Set the target manually
 echo.  --pgo-job  The job to use for PGO training; implies --pgo
@@ -55,7 +54,7 @@ exit /b 127
 
 :Run
 setlocal
-set platf=x64
+set platf=Win32
 set conf=Release
 set target=Build
 set dir=%~dp0
@@ -81,8 +80,7 @@ if "%~1"=="-k" (set kill=true) & shift & goto CheckOpts
 if "%~1"=="--pgo" (set do_pgo=true) & shift & goto CheckOpts
 if "%~1"=="--pgo-job" (set do_pgo=true) & (set pgo_job=%~2) & shift & shift & goto CheckOpts
 if "%~1"=="--test-marker" (set UseTestMarker=true) & shift & goto CheckOpts
-if "%~1"=="-V" shift & goto Version
-if "%~1"=="--regen" (set Regen=true) & shift & goto CheckOpts
+if "%~1"=="-V" shift & goto :Version
 rem These use the actual property names used by MSBuild.  We could just let
 rem them in through the environment, but we specify them on the command line
 rem anyway for visibility so set defaults after this
@@ -116,14 +114,8 @@ rem Setup the environment
 call "%dir%find_msbuild.bat" %MSBUILD%
 if ERRORLEVEL 1 (echo Cannot locate MSBuild.exe on PATH or as MSBUILD variable & exit /b 2)
 
-call "%dir%find_python.bat" %PYTHON%
-if ERRORLEVEL 1 (echo Cannot locate python.exe on PATH or as PYTHON variable & exit /b 3)
-set PythonForBuild=%PYTHON%
-
 if "%kill%"=="true" call :Kill
-if ERRORLEVEL 1 exit /B %ERRORLEVEL%
-
-if "%regen%"=="true" goto :Regen
+if ERRORLEVEL 1 exit /B 3
 
 if "%do_pgo%"=="true" (
     set conf=PGInstrument
@@ -149,15 +141,6 @@ echo on
 %MSBUILD% "%dir%\pythoncore.vcxproj" /t:KillPython %verbose%^
  /p:Configuration=%conf% /p:Platform=%platf%^
  /p:KillPython=true
-
-@echo off
-exit /B %ERRORLEVEL%
-
-:Regen
-echo on
-%MSBUILD% "%dir%\pythoncore.vcxproj" /t:Regen %verbose%^
- /p:Configuration=%conf% /p:Platform=%platf%^
- /p:ForceRegen=true
 
 @echo off
 exit /B %ERRORLEVEL%

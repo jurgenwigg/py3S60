@@ -24,16 +24,14 @@ programmers will encounter a fragment of code like this::
    z++;
 
 Only the ``x++`` statement is executed if the condition is true, but the
-indentation leads many to believe otherwise.  Even experienced C programmers will
-sometimes stare at it a long time wondering as to why ``y`` is being decremented even
+indentation leads you to believe otherwise.  Even experienced C programmers will
+sometimes stare at it a long time wondering why ``y`` is being decremented even
 for ``x > y``.
 
 Because there are no begin/end brackets, Python is much less prone to
 coding-style conflicts.  In C there are many different ways to place the braces.
-After becoming used to reading and writing code using a particular style,
-it is normal to feel somewhat uneasy when reading (or being required to write)
-in a different one.
-
+If you're used to reading and writing code that uses one style, you will feel at
+least slightly uneasy when reading (or being required to write) another style.
 
 Many coding styles place begin/end brackets on a line by themselves.  This makes
 programs considerably longer and wastes valuable screen space, making it harder
@@ -259,8 +257,9 @@ Why isn't there a switch or case statement in Python?
 -----------------------------------------------------
 
 You can do this easily enough with a sequence of ``if... elif... elif... else``.
-For literal values, or constants within a namespace, you can also use a
-``match ... case`` statement.
+There have been some proposals for switch statement syntax, but there is no
+consensus (yet) on whether and how to do range tests.  See :pep:`275` for
+complete details and the current status.
 
 For cases where you need to choose from a very large number of possibilities,
 you can create a dictionary mapping case values to functions to call.  For
@@ -590,11 +589,11 @@ to the end of some internal list; an interface specification cannot test that
 your :meth:`append` implementation will actually do this correctly, but it's
 trivial to check this property in a test suite.
 
-Writing test suites is very helpful, and you might want to design your code to
-make it easily tested. One increasingly popular technique, test-driven
-development, calls for writing parts of the test suite first, before you write
-any of the actual code.  Of course Python allows you to be sloppy and not write
-test cases at all.
+Writing test suites is very helpful, and you might want to design your code with
+an eye to making it easily tested.  One increasingly popular technique,
+test-directed development, calls for writing parts of the test suite first,
+before you write any of the actual code.  Of course Python allows you to be
+sloppy and not write test cases at all.
 
 
 Why is there no goto?
@@ -657,7 +656,7 @@ Why doesn't Python have a "with" statement for attribute assignments?
 ---------------------------------------------------------------------
 
 Python has a 'with' statement that wraps the execution of a block, calling code
-on the entrance and exit from the block.  Some languages have a construct that
+on the entrance and exit from the block.  Some language have a construct that
 looks like this::
 
    with obj:
@@ -706,15 +705,6 @@ write this::
 This also has the side-effect of increasing execution speed because name
 bindings are resolved at run-time in Python, and the second version only needs
 to perform the resolution once.
-
-
-Why don't generators support the with statement?
-------------------------------------------------
-
-For technical reasons, a generator used directly as a context manager
-would not work correctly.  When, as is most common, a generator is used as
-an iterator run to completion, no closing is needed.  When it is, wrap
-it as "contextlib.closing(generator)" in the 'with' statement.
 
 
 Why are colons required for the if/while/def/class statements?

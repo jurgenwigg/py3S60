@@ -15,8 +15,6 @@ for parsing and creating XML data.
 
 .. versionchanged:: 3.3
    This module will use a fast implementation whenever available.
-
-.. deprecated:: 3.3
    The :mod:`xml.etree.cElementTree` module is deprecated.
 
 
@@ -455,12 +453,6 @@ Supported XPath syntax
 |                       | has the given value.  The value cannot contain       |
 |                       | quotes.                                              |
 +-----------------------+------------------------------------------------------+
-| ``[@attrib!='value']``| Selects all elements for which the given attribute   |
-|                       | does not have the given value. The value cannot      |
-|                       | contain quotes.                                      |
-|                       |                                                      |
-|                       | .. versionadded:: 3.10                               |
-+-----------------------+------------------------------------------------------+
 | ``[tag]``             | Selects all elements that have a child named         |
 |                       | ``tag``.  Only immediate children are supported.     |
 +-----------------------+------------------------------------------------------+
@@ -469,21 +461,9 @@ Supported XPath syntax
 |                       |                                                      |
 |                       | .. versionadded:: 3.7                                |
 +-----------------------+------------------------------------------------------+
-| ``[.!='text']``       | Selects all elements whose complete text content,    |
-|                       | including descendants, does not equal the given      |
-|                       | ``text``.                                            |
-|                       |                                                      |
-|                       | .. versionadded:: 3.10                               |
-+-----------------------+------------------------------------------------------+
 | ``[tag='text']``      | Selects all elements that have a child named         |
 |                       | ``tag`` whose complete text content, including       |
 |                       | descendants, equals the given ``text``.              |
-+-----------------------+------------------------------------------------------+
-| ``[tag!='text']``     | Selects all elements that have a child named         |
-|                       | ``tag`` whose complete text content, including       |
-|                       | descendants, does not equal the given ``text``.      |
-|                       |                                                      |
-|                       | .. versionadded:: 3.10                               |
 +-----------------------+------------------------------------------------------+
 | ``[position]``        | Selects all elements that are located at the given   |
 |                       | position.  The position can be either an integer     |
@@ -596,18 +576,6 @@ Functions
    parser is used.  Returns an :class:`Element` instance.
 
    .. versionadded:: 3.2
-
-
-.. function:: indent(tree, space="  ", level=0)
-
-   Appends whitespace to the subtree to indent the tree visually.
-   This can be used to generate pretty-printed XML output.
-   *tree* can be an Element or ElementTree.  *space* is the whitespace
-   string that will be inserted for each indentation level, two space
-   characters by default.  For indenting partial subtrees inside of an
-   already indented tree, pass the initial indentation level as *level*.
-
-   .. versionadded:: 3.9
 
 
 .. function:: iselement(element)
@@ -842,24 +810,15 @@ Functions
    loader fails, it can return None or raise an exception.
 
 
-.. function:: xml.etree.ElementInclude.include( elem, loader=None, base_url=None, \
-                                                max_depth=6)
+.. function:: xml.etree.ElementInclude.include( elem, loader=None)
 
    This function expands XInclude directives.  *elem* is the root element.  *loader* is
    an optional resource loader.  If omitted, it defaults to :func:`default_loader`.
    If given, it should be a callable that implements the same interface as
-   :func:`default_loader`.  *base_url* is base URL of the original file, to resolve
-   relative include file references.  *max_depth* is the maximum number of recursive
-   inclusions.  Limited to reduce the risk of malicious content explosion. Pass a
-   negative value to disable the limitation.
-
-   Returns the expanded resource.  If the parse mode is
+   :func:`default_loader`.  Returns the expanded resource.  If the parse mode is
    ``"xml"``, this is an ElementTree instance.  If the parse mode is "text",
    this is a Unicode string.  If the loader fails, it can return None or
    raise an exception.
-
-   .. versionadded:: 3.9
-      The *base_url* and *max_depth* parameters.
 
 
 .. _elementtree-element-objects:
@@ -997,6 +956,18 @@ Element Objects
       in the expression into the given namespace.
 
 
+   .. method:: getchildren()
+
+      .. deprecated-removed:: 3.2 3.9
+         Use ``list(elem)`` or iteration.
+
+
+   .. method:: getiterator(tag=None)
+
+      .. deprecated-removed:: 3.2 3.9
+         Use method :meth:`Element.iter` instead.
+
+
    .. method:: insert(index, subelement)
 
       Inserts *subelement* at the given position in this element.  Raises
@@ -1129,6 +1100,12 @@ ElementTree Objects
    .. method:: findtext(match, default=None, namespaces=None)
 
       Same as :meth:`Element.findtext`, starting at the root of the tree.
+
+
+   .. method:: getiterator(tag=None)
+
+      .. deprecated-removed:: 3.2 3.9
+         Use method :meth:`ElementTree.iter` instead.
 
 
    .. method:: getroot()

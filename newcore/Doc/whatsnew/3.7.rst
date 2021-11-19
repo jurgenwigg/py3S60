@@ -102,7 +102,7 @@ CPython implementation improvements:
   * :ref:`PEP 538 <whatsnew37-pep538>`, legacy C locale coercion
   * :ref:`PEP 540 <whatsnew37-pep540>`, forced UTF-8 runtime mode
 * :ref:`PEP 552 <whatsnew37-pep552>`, deterministic .pycs
-* :ref:`New Python Development Mode <whatsnew37-devmode>`
+* :ref:`the new development runtime mode <whatsnew37-devmode>`
 * :ref:`PEP 565 <whatsnew37-pep565>`, improved :exc:`DeprecationWarning`
   handling
 
@@ -232,8 +232,7 @@ PEP 540: Forced UTF-8 Runtime Mode
 -----------------------------------
 
 The new :option:`-X` ``utf8`` command line option and :envvar:`PYTHONUTF8`
-environment variable can be used to enable the :ref:`Python UTF-8 Mode
-<utf8-mode>`.
+environment variable can be used to enable the CPython *UTF-8 mode*.
 
 When in UTF-8 mode, CPython ignores the locale settings, and uses the
 UTF-8 encoding by default.  The error handlers for :data:`sys.stdin` and
@@ -480,15 +479,15 @@ Three new translations have been added:
 
 .. _whatsnew37-devmode:
 
-Python Development Mode (-X dev)
+Development Runtime Mode: -X dev
 --------------------------------
 
 The new :option:`-X` ``dev`` command line option or the new
 :envvar:`PYTHONDEVMODE` environment variable can be used to enable
-:ref:`Python Development Mode <devmode>`.  When in development mode, Python performs
+CPython's *development mode*.  When in development mode, CPython performs
 additional runtime checks that are too expensive to be enabled by default.
-See :ref:`Python Development Mode <devmode>` documentation for the full
-description.
+See :option:`-X` ``dev`` documentation for the full description of the effects
+of this mode.
 
 
 Other Language Changes
@@ -1588,8 +1587,8 @@ The initialization of the default warnings filters has changed as follows:
        for the new ``-X dev`` mode)
      * any implicit filters defined directly by the warnings machinery
 
-* in :ref:`CPython debug builds <debug-build>`, all warnings are now displayed
-  by default (the implicit filter list is empty)
+* in CPython debug builds, all warnings are now displayed by default (the
+  implicit filter list is empty)
 
 (Contributed by Nick Coghlan and Victor Stinner in :issue:`20361`,
 :issue:`32043`, and :issue:`32230`.)

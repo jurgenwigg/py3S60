@@ -78,6 +78,7 @@ The module defines the following items:
    of the last modification to the file; the fields are described in section
    :ref:`zipinfo-objects`.
 
+
 .. function:: is_zipfile(filename)
 
    Returns ``True`` if *filename* is a valid ZIP file based on its magic number,
@@ -405,11 +406,6 @@ ZipFile Objects
       If ``arcname`` (or ``filename``, if ``arcname`` is  not given) contains a null
       byte, the name of the file in the archive will be truncated at the null byte.
 
-   .. note::
-
-      A leading slash in the filename may lead to the archive being impossible to
-      open in some zip programs on Windows systems.
-
    .. versionchanged:: 3.6
       Calling :meth:`write` on a ZipFile created with mode ``'r'`` or
       a closed ZipFile will raise a :exc:`ValueError`.  Previously,
@@ -487,26 +483,22 @@ Path Objects
 Path objects expose the following features of :mod:`pathlib.Path`
 objects:
 
-Path objects are traversable using the ``/`` operator or ``joinpath``.
+Path objects are traversable using the ``/`` operator.
 
 .. attribute:: Path.name
 
    The final path component.
 
-.. method:: Path.open(mode='r', *, pwd, **)
+.. method:: Path.open(*, **)
 
-   Invoke :meth:`ZipFile.open` on the current path.
-   Allows opening for read or write, text or binary
-   through supported modes: 'r', 'w', 'rb', 'wb'.
-   Positional and keyword arguments are passed through to
-   :class:`io.TextIOWrapper` when opened as text and
-   ignored otherwise.
-   ``pwd`` is the ``pwd`` parameter to
-   :meth:`ZipFile.open`.
+   Invoke :meth:`ZipFile.open` on the current path. Accepts
+   the same arguments as :meth:`ZipFile.open`.
 
-   .. versionchanged:: 3.9
-      Added support for text and binary modes for open. Default
-      mode is now text.
+   .. caution::
+
+      The signature on this function changes in an incompatible way
+      in Python 3.9. For a future-compatible version, consider using
+      the third-party zipp.Path package (3.0 or later).
 
 .. method:: Path.iterdir()
 
@@ -535,19 +527,6 @@ Path objects are traversable using the ``/`` operator or ``joinpath``.
 .. method:: Path.read_bytes()
 
    Read the current file as bytes.
-
-.. method:: Path.joinpath(*other)
-
-   Return a new Path object with each of the *other* arguments
-   joined. The following are equivalent::
-
-   >>> Path(...).joinpath('child').joinpath('grandchild')
-   >>> Path(...).joinpath('child', 'grandchild')
-   >>> Path(...) / 'child' / 'grandchild'
-
-   .. versionchanged:: 3.10
-      Prior to 3.10, ``joinpath`` was undocumented and accepted
-      exactly one parameter.
 
 
 .. _pyzipfile-objects:
@@ -860,8 +839,6 @@ File System limitations
 Exceeding limitations on different file systems can cause decompression failed.
 Such as allowable characters in the directory entries, length of the file name,
 length of the pathname, size of a single file, and number of files, etc.
-
-.. _zipfile-resources-limitations:
 
 Resources limitations
 ~~~~~~~~~~~~~~~~~~~~~

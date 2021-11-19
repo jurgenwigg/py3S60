@@ -151,9 +151,8 @@ to 1 and ``-bb`` sets :c:data:`Py_BytesWarningFlag` to 2.
 
 .. c:var:: int Py_LegacyWindowsFSEncodingFlag
 
-   If the flag is non-zero, use the ``mbcs`` encoding with ``replace`` error
-   handler, instead of the UTF-8 encoding with ``surrogatepass`` error handler,
-   for the :term:`filesystem encoding and error handler`.
+   If the flag is non-zero, use the ``mbcs`` encoding instead of the UTF-8
+   encoding for the filesystem encoding.
 
    Set to ``1`` if the :envvar:`PYTHONLEGACYWINDOWSFSENCODING` environment
    variable is set to a non-empty string.
@@ -376,12 +375,6 @@ Process-wide parameters
    The returned string points into static storage; the caller should not modify its
    value.
 
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
-
 
 .. c:function:: wchar_t* Py_GetPrefix()
 
@@ -394,12 +387,6 @@ Process-wide parameters
    :file:`Makefile` and the ``--prefix`` argument to the :program:`configure`
    script at build time.  The value is available to Python code as ``sys.prefix``.
    It is only useful on Unix.  See also the next function.
-
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
 
 
 .. c:function:: wchar_t* Py_GetExecPrefix()
@@ -436,12 +423,6 @@ Process-wide parameters
    while having :file:`/usr/local/plat` be a different filesystem for each
    platform.
 
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
-
 
 .. c:function:: wchar_t* Py_GetProgramFullPath()
 
@@ -455,12 +436,6 @@ Process-wide parameters
    static storage; the caller should not modify its value.  The value is available
    to Python code as ``sys.executable``.
 
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
-
 
 .. c:function:: wchar_t* Py_GetPath()
 
@@ -473,19 +448,13 @@ Process-wide parameters
    (set by :c:func:`Py_SetProgramName` above) and some environment variables.
    The returned string consists of a series of directory names separated by a
    platform dependent delimiter character.  The delimiter character is ``':'``
-   on Unix and macOS, ``';'`` on Windows.  The returned string points into
+   on Unix and Mac OS X, ``';'`` on Windows.  The returned string points into
    static storage; the caller should not modify its value.  The list
    :data:`sys.path` is initialized with this value on interpreter startup; it
    can be (and usually is) modified later to change the search path for loading
    modules.
 
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
    .. XXX should give the exact rules
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
 
 
 .. c:function::  void Py_SetPath(const wchar_t *)
@@ -500,7 +469,7 @@ Process-wide parameters
    default search path but uses the one provided instead.  This is useful if
    Python is embedded by an application that has full knowledge of the location
    of all modules.  The path components should be separated by the platform
-   dependent delimiter character, which is ``':'`` on Unix and macOS, ``';'``
+   dependent delimiter character, which is ``':'`` on Unix and Mac OS X, ``';'``
    on Windows.
 
    This also causes :data:`sys.executable` to be set to the program
@@ -541,7 +510,7 @@ Process-wide parameters
    Return the platform identifier for the current platform.  On Unix, this is
    formed from the "official" name of the operating system, converted to lower
    case, followed by the major revision number; e.g., for Solaris 2.x, which is
-   also known as SunOS 5.x, the value is ``'sunos5'``.  On macOS, it is
+   also known as SunOS 5.x, the value is ``'sunos5'``.  On Mac OS X, it is
    ``'darwin'``.  On Windows, it is ``'win'``.  The returned string points into
    static storage; the caller should not modify its value.  The value is available
    to Python code as ``sys.platform``.
@@ -667,12 +636,6 @@ Process-wide parameters
    Return the default "home", that is, the value set by a previous call to
    :c:func:`Py_SetPythonHome`, or the value of the :envvar:`PYTHONHOME`
    environment variable if it is set.
-
-   This function should not be called before :c:func:`Py_Initialize`, otherwise
-   it returns ``NULL``.
-
-   .. versionchanged:: 3.10
-      It now returns ``NULL`` if called before :c:func:`Py_Initialize`.
 
 
 .. _threads:
@@ -879,12 +842,12 @@ code, or when embedding the Python interpreter:
       single: PyEval_SaveThread()
       single: PyEval_RestoreThread()
 
-   Deprecated function which does nothing.
+   Initialize and acquire the global interpreter lock.  It should be called in the
+   main thread before creating a second thread or engaging in any other thread
+   operations such as ``PyEval_ReleaseThread(tstate)``. It is not needed before
+   calling :c:func:`PyEval_SaveThread` or :c:func:`PyEval_RestoreThread`.
 
-   In Python 3.6 and older, this function created the GIL if it didn't exist.
-
-   .. versionchanged:: 3.9
-      The function now does nothing.
+   This is a no-op when called for a second time.
 
    .. versionchanged:: 3.7
       This function is now called by :c:func:`Py_Initialize()`, so you don't
@@ -892,8 +855,6 @@ code, or when embedding the Python interpreter:
 
    .. versionchanged:: 3.2
       This function cannot be called before :c:func:`Py_Initialize()` anymore.
-
-   .. deprecated-removed:: 3.9 3.11
 
    .. index:: module: _thread
 
@@ -906,8 +867,6 @@ code, or when embedding the Python interpreter:
 
    .. versionchanged:: 3.7
       The :term:`GIL` is now initialized by :c:func:`Py_Initialize()`.
-
-   .. deprecated-removed:: 3.9 3.11
 
 
 .. c:function:: PyThreadState* PyEval_SaveThread()
@@ -1089,10 +1048,6 @@ All of the following functions must be called after :c:func:`Py_Initialize`.
    Reset all information in a thread state object.  The global interpreter lock
    must be held.
 
-   .. versionchanged:: 3.9
-      This function now calls the :c:member:`PyThreadState.on_delete` callback.
-      Previously, that happened in :c:func:`PyThreadState_Delete`.
-
 
 .. c:function:: void PyThreadState_Delete(PyThreadState *tstate)
 
@@ -1101,64 +1056,10 @@ All of the following functions must be called after :c:func:`Py_Initialize`.
    :c:func:`PyThreadState_Clear`.
 
 
-.. c:function:: void PyThreadState_DeleteCurrent(void)
-
-   Destroy the current thread state and release the global interpreter lock.
-   Like :c:func:`PyThreadState_Delete`, the global interpreter lock need not
-   be held. The thread state must have been reset with a previous call
-   to :c:func:`PyThreadState_Clear`.
-
-
-.. c:function:: PyFrameObject* PyThreadState_GetFrame(PyThreadState *tstate)
-
-   Get the current frame of the Python thread state *tstate*.
-
-   Return a :term:`strong reference`. Return ``NULL`` if no frame is currently
-   executing.
-
-   See also :c:func:`PyEval_GetFrame`.
-
-   *tstate* must not be ``NULL``.
-
-   .. versionadded:: 3.9
-
-
-.. c:function:: uint64_t PyThreadState_GetID(PyThreadState *tstate)
-
-   Get the unique thread state identifier of the Python thread state *tstate*.
-
-   *tstate* must not be ``NULL``.
-
-   .. versionadded:: 3.9
-
-
-.. c:function:: PyInterpreterState* PyThreadState_GetInterpreter(PyThreadState *tstate)
-
-   Get the interpreter of the Python thread state *tstate*.
-
-   *tstate* must not be ``NULL``.
-
-   .. versionadded:: 3.9
-
-
-.. c:function:: PyInterpreterState* PyInterpreterState_Get(void)
-
-   Get the current interpreter.
-
-   Issue a fatal error if there no current Python thread state or no current
-   interpreter. It cannot return NULL.
-
-   The caller must hold the GIL.
-
-   .. versionadded:: 3.9
-
-
-.. c:function:: int64_t PyInterpreterState_GetID(PyInterpreterState *interp)
+.. c:function:: PY_INT64_T PyInterpreterState_GetID(PyInterpreterState *interp)
 
    Return the interpreter's unique ID.  If there was any error in doing
    so then ``-1`` is returned and an error is set.
-
-   The caller must hold the GIL.
 
    .. versionadded:: 3.7
 
@@ -1173,32 +1074,6 @@ All of the following functions must be called after :c:func:`Py_Initialize`.
    extensions should use to store interpreter-specific state information.
 
    .. versionadded:: 3.8
-
-.. c:type:: PyObject* (*_PyFrameEvalFunction)(PyThreadState *tstate, PyFrameObject *frame, int throwflag)
-
-   Type of a frame evaluation function.
-
-   The *throwflag* parameter is used by the ``throw()`` method of generators:
-   if non-zero, handle the current exception.
-
-   .. versionchanged:: 3.9
-      The function now takes a *tstate* parameter.
-
-.. c:function:: _PyFrameEvalFunction _PyInterpreterState_GetEvalFrameFunc(PyInterpreterState *interp)
-
-   Get the frame evaluation function.
-
-   See the :pep:`523` "Adding a frame evaluation API to CPython".
-
-   .. versionadded:: 3.9
-
-.. c:function:: void _PyInterpreterState_SetEvalFrameFunc(PyInterpreterState *interp, _PyFrameEvalFunction eval_frame)
-
-   Set the frame evaluation function.
-
-   See the :pep:`523` "Adding a frame evaluation API to CPython".
-
-   .. versionadded:: 3.9
 
 
 .. c:function:: PyObject* PyThreadState_GetDict()
@@ -1227,7 +1102,7 @@ All of the following functions must be called after :c:func:`Py_Initialize`.
 .. c:function:: void PyEval_AcquireThread(PyThreadState *tstate)
 
    Acquire the global interpreter lock and set the current thread state to
-   *tstate*, which must not be ``NULL``.  The lock must have been created earlier.
+   *tstate*, which should not be ``NULL``.  The lock must have been created earlier.
    If this thread already has the lock, deadlock ensues.
 
    .. note::
@@ -1451,10 +1326,6 @@ pointer and a void pointer argument.
    This function doesn't need a current thread state to run, and it doesn't
    need the global interpreter lock.
 
-   To call this function in a subinterpreter, the caller must hold the GIL.
-   Otherwise, the function *func* can be scheduled to be called from the wrong
-   interpreter.
-
    .. warning::
       This is a low-level function, only useful for very special cases.
       There is no guarantee that *func* will be called as quick as
@@ -1462,12 +1333,6 @@ pointer and a void pointer argument.
       *func* won't be called before the system call returns.  This
       function is generally **not** suitable for calling Python code from
       arbitrary C threads.  Instead, use the :ref:`PyGILState API<gilstate>`.
-
-   .. versionchanged:: 3.9
-      If this function is called in a subinterpreter, the function *func* is
-      now scheduled to be called from the subinterpreter, rather than being
-      called from the main interpreter. Each subinterpreter now has its own
-      list of scheduled calls.
 
    .. versionadded:: 3.1
 
@@ -1591,8 +1456,6 @@ Python-level trace functions in previous versions.
    profile function is called for all monitored events except :const:`PyTrace_LINE`
    :const:`PyTrace_OPCODE` and :const:`PyTrace_EXCEPTION`.
 
-   The caller must hold the :term:`GIL`.
-
 
 .. c:function:: void PyEval_SetTrace(Py_tracefunc func, PyObject *obj)
 
@@ -1602,9 +1465,6 @@ Python-level trace functions in previous versions.
    objects being called.  Any trace function registered using :c:func:`PyEval_SetTrace`
    will not receive :const:`PyTrace_C_CALL`, :const:`PyTrace_C_EXCEPTION` or
    :const:`PyTrace_C_RETURN` as a value for the *what* parameter.
-
-   The caller must hold the :term:`GIL`.
-
 
 .. _advanced-debugging:
 

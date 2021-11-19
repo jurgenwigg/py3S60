@@ -27,9 +27,6 @@ on efficient attribute extraction for output formatting and manipulation.
    Module :mod:`time`
       Time access and conversions.
 
-   Module :mod:`zoneinfo`
-      Concrete time zones representing the IANA time zone database.
-
    Package `dateutil <https://dateutil.readthedocs.io/en/stable/>`_
       Third-party library with expanded time zone and parsing support.
 
@@ -674,8 +671,7 @@ Instance methods:
 
 .. method:: date.isocalendar()
 
-   Return a :term:`named tuple` object with three components: ``year``,
-   ``week`` and ``weekday``.
+   Return a 3-tuple, (ISO year, ISO week number, ISO weekday).
 
    The ISO calendar is a widely used variant of the Gregorian calendar. [#]_
 
@@ -687,14 +683,11 @@ Instance methods:
    For example, 2004 begins on a Thursday, so the first week of ISO year 2004
    begins on Monday, 29 Dec 2003 and ends on Sunday, 4 Jan 2004::
 
-        >>> from datetime import date
-        >>> date(2003, 12, 29).isocalendar()
-        datetime.IsoCalendarDate(year=2004, week=1, weekday=1)
-        >>> date(2004, 1, 4).isocalendar()
-        datetime.IsoCalendarDate(year=2004, week=1, weekday=7)
-
-   .. versionchanged:: 3.9
-      Result changed from a tuple to a :term:`named tuple`.
+       >>> from datetime import date
+       >>> date(2003, 12, 29).isocalendar()
+       (2004, 1, 1)
+       >>> date(2004, 1, 4).isocalendar()
+       (2004, 1, 7)
 
 .. method:: date.isoformat()
 
@@ -1405,8 +1398,8 @@ Instance methods:
 
 .. method:: datetime.isocalendar()
 
-   Return a :term:`named tuple` with three components: ``year``, ``week``
-   and ``weekday``. The same as ``self.date().isocalendar()``.
+   Return a 3-tuple, (ISO year, ISO week number, ISO weekday). The same as
+   ``self.date().isocalendar()``.
 
 
 .. method:: datetime.isoformat(sep='T', timespec='auto')
@@ -2177,13 +2170,14 @@ only EST (fixed offset -5 hours), or only EDT (fixed offset -4 hours)).
 
 .. seealso::
 
-    :mod:`zoneinfo`
+   `dateutil.tz <https://dateutil.readthedocs.io/en/stable/tz.html>`_
       The :mod:`datetime` module has a basic :class:`timezone` class (for
       handling arbitrary fixed offsets from UTC) and its :attr:`timezone.utc`
       attribute (a UTC timezone instance).
 
-      ``zoneinfo`` brings the *IANA timezone database* (also known as the Olson
-      database) to Python, and its usage is recommended.
+      *dateutil.tz* library brings the *IANA timezone database*
+      (also known as the Olson database) to Python, and its usage is
+      recommended.
 
    `IANA timezone database <https://www.iana.org/time-zones>`_
       The Time Zone Database (often called tz, tzdata or zoneinfo) contains code
@@ -2367,7 +2361,7 @@ requires, and these work on all platforms with a standard C implementation.
 |           | string if the object is        | +063415,               |       |
 |           | naive).                        | -030712.345216         |       |
 +-----------+--------------------------------+------------------------+-------+
-| ``%Z``    | Time zone name (empty string   | (empty), UTC, GMT      | \(6)  |
+| ``%Z``    | Time zone name (empty string   | (empty), UTC, EST, CST |       |
 |           | if the object is naive).       |                        |       |
 +-----------+--------------------------------+------------------------+-------+
 | ``%j``    | Day of the year as a           | 001, 002, ..., 366     | \(9)  |
@@ -2433,8 +2427,7 @@ incomplete or ambiguous ISO 8601 directives will raise a :exc:`ValueError`.
 The full set of format codes supported varies across platforms, because Python
 calls the platform C library's :func:`strftime` function, and platform
 variations are common. To see the full set of format codes supported on your
-platform, consult the :manpage:`strftime(3)` documentation. There are also
-differences between platforms in handling of unsupported format specifiers.
+platform, consult the :manpage:`strftime(3)` documentation.
 
 .. versionadded:: 3.6
    ``%G``, ``%u`` and ``%V`` were added.
@@ -2539,18 +2532,9 @@ Notes:
       In addition, providing ``'Z'`` is identical to ``'+00:00'``.
 
    ``%Z``
-      In :meth:`strftime`, ``%Z`` is replaced by an empty string if
-      :meth:`tzname` returns ``None``; otherwise ``%Z`` is replaced by the
-      returned value, which must be a string.
-
-      :meth:`strptime` only accepts certain values for ``%Z``:
-
-      1. any value in ``time.tzname`` for your machine's locale
-      2. the hard-coded values ``UTC`` and ``GMT``
-
-      So someone living in Japan may have ``JST``, ``UTC``, and ``GMT`` as
-      valid values, but probably not ``EST``. It will raise ``ValueError`` for
-      invalid values.
+      If :meth:`tzname` returns ``None``, ``%Z`` is replaced by an empty
+      string. Otherwise ``%Z`` is replaced by the returned value, which must
+      be a string.
 
    .. versionchanged:: 3.2
       When the ``%z`` directive is provided to the :meth:`strptime` method, an

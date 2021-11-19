@@ -614,21 +614,6 @@ To loop over a sequence in sorted order, use the :func:`sorted` function which
 returns a new sorted list while leaving the source unaltered. ::
 
    >>> basket = ['apple', 'orange', 'apple', 'pear', 'orange', 'banana']
-   >>> for i in sorted(basket):
-   ...     print(i)
-   ...
-   apple
-   apple
-   banana
-   orange
-   orange
-   pear
-
-Using :func:`set` on a sequence eliminates duplicate elements. The use of
-:func:`sorted` in combination with :func:`set` over a sequence is an idiomatic
-way to loop over unique elements of the sequence in sorted order. ::
-
-   >>> basket = ['apple', 'orange', 'apple', 'pear', 'orange', 'banana']
    >>> for f in sorted(set(basket)):
    ...     print(f)
    ...
@@ -661,8 +646,9 @@ operators, not just comparisons.
 
 The comparison operators ``in`` and ``not in`` check whether a value occurs
 (does not occur) in a sequence.  The operators ``is`` and ``is not`` compare
-whether two objects are really the same object.  All comparison operators have
-the same priority, which is lower than that of all numerical operators.
+whether two objects are really the same object; this only matters for mutable
+objects like lists.  All comparison operators have the same priority, which is
+lower than that of all numerical operators.
 
 Comparisons can be chained.  For example, ``a < b == c`` tests whether ``a`` is
 less than ``b`` and moreover ``b`` equals ``c``.

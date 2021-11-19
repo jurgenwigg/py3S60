@@ -1784,7 +1784,7 @@ instead of an OrderedDict.
 .. nonce: Q0ktFC
 .. section: Library
 
-An ExitStack is now used internally within subprocess.Popen to clean up pipe
+An ExitStack is now used internally within subprocess.POpen to clean up pipe
 file handles. No behavior change in normal operation. But if closing one
 handle were ever to cause an exception, the others will now be closed
 instead of leaked.  (patch by Giampaolo Rodola)
@@ -2054,7 +2054,7 @@ Speed-up building enums by value, e.g. http.HTTPStatus(200).
 .. section: Library
 
 random.gammavariate(1.0, beta) now computes the same result as
-random.expovariate(1.0 / beta).  This synchronizes the two algorithms and
+random.expovariate(1.0 / beta).  This synchonizes the two algorithms and
 eliminates some idiosyncrasies in the old implementation.  It does however
 produce a difference stream of random variables than it used to.
 
@@ -3355,7 +3355,7 @@ if the ``PATH`` environment variable is not set.
 
 On Windows, fix multiprocessing.Connection for very large read: fix
 _winapi.PeekNamedPipe() and _winapi.ReadFile() for read larger than INT_MAX
-(usually ``2**31-1``).
+(usually 2^31-1).
 
 ..
 

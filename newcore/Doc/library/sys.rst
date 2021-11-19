@@ -72,8 +72,6 @@ always available.
    To loop over the standard input, or the list of files given on the
    command line, see the :mod:`fileinput` module.
 
-   See also :data:`sys.orig_argv`.
-
    .. note::
       On Unix, command line arguments are passed by bytes from OS.  Python decodes
       them with filesystem encoding and "surrogateescape" error handler.
@@ -153,11 +151,9 @@ always available.
 
 .. data:: builtin_module_names
 
-   A tuple of strings containing the names of all modules that are compiled into this
+   A tuple of strings giving the names of all modules that are compiled into this
    Python interpreter.  (This information is not available in any other way ---
    ``modules.keys()`` only lists the imported modules.)
-
-   See also the :attr:`sys.stdlib_module_names` list.
 
 
 .. function:: call_tracing(func, args)
@@ -198,18 +194,6 @@ always available.
 
    .. audit-event:: sys._current_frames "" sys._current_frames
 
-.. function:: _current_exceptions()
-
-   Return a dictionary mapping each thread's identifier to the topmost exception
-   currently active in that thread at the time the function is called.
-   If a thread is not currently handling an exception, it is not included in
-   the result dictionary.
-
-   This is most useful for statistical profiling.
-
-   This function should be used for internal and specialized purposes only.
-
-   .. audit-event:: sys._current_exceptions "" sys._current_exceptions
 
 .. function:: breakpointhook()
 
@@ -250,8 +234,7 @@ always available.
    Print low-level information to stderr about the state of CPython's memory
    allocator.
 
-   If Python is `built in debug mode <debug-build>` (:option:`configure
-   --with-pydebug option <--with-pydebug>`), it also performs some expensive
+   If Python is configured --with-pydebug, it also performs some expensive
    internal consistency checks.
 
    .. versionadded:: 3.3
@@ -462,9 +445,9 @@ always available.
    The :term:`named tuple` *flags* exposes the status of command line
    flags. The attributes are read only.
 
-   ============================= ================================================================
+   ============================= =============================
    attribute                     flag
-   ============================= ================================================================
+   ============================= =============================
    :const:`debug`                :option:`-d`
    :const:`inspect`              :option:`-i`
    :const:`interactive`          :option:`-i`
@@ -478,9 +461,9 @@ always available.
    :const:`bytes_warning`        :option:`-b`
    :const:`quiet`                :option:`-q`
    :const:`hash_randomization`   :option:`-R`
-   :const:`dev_mode`             :option:`-X dev <-X>` (:ref:`Python Development Mode <devmode>`)
-   :const:`utf8_mode`            :option:`-X utf8 <-X>`
-   ============================= ================================================================
+   :const:`dev_mode`             :option:`-X` ``dev``
+   :const:`utf8_mode`            :option:`-X` ``utf8``
+   ============================= =============================
 
    .. versionchanged:: 3.2
       Added ``quiet`` attribute for the new :option:`-q` flag.
@@ -495,9 +478,8 @@ always available.
       Added ``isolated`` attribute for :option:`-I` ``isolated`` flag.
 
    .. versionchanged:: 3.7
-      Added the ``dev_mode`` attribute for the new :ref:`Python Development
-      Mode <devmode>` and the ``utf8_mode`` attribute for the new  :option:`-X`
-      ``utf8`` flag.
+      Added ``dev_mode`` attribute for the new :option:`-X` ``dev`` flag
+      and ``utf8_mode`` attribute for the new  :option:`-X` ``utf8`` flag.
 
 
 .. data:: float_info
@@ -516,8 +498,6 @@ always available.
    +=====================+================+==================================================+
    | :const:`epsilon`    | DBL_EPSILON    | difference between 1.0 and the least value       |
    |                     |                | greater than 1.0 that is representable as a float|
-   |                     |                |                                                  |
-   |                     |                | See also :func:`math.ulp`.                       |
    +---------------------+----------------+--------------------------------------------------+
    | :const:`dig`        | DBL_DIG        | maximum number of decimal digits that can be     |
    |                     |                | faithfully represented in a float;  see below    |
@@ -534,10 +514,6 @@ always available.
    |                     |                | range of representable finite floats             |
    +---------------------+----------------+--------------------------------------------------+
    | :const:`min`        | DBL_MIN        | minimum representable positive *normalized* float|
-   |                     |                |                                                  |
-   |                     |                | Use :func:`math.ulp(0.0) <math.ulp>` to get the  |
-   |                     |                | smallest positive *denormalized* representable   |
-   |                     |                | float.                                           |
    +---------------------+----------------+--------------------------------------------------+
    | :const:`min_exp`    | DBL_MIN_EXP    | minimum integer *e* such that ``radix**(e-1)`` is|
    |                     |                | a normalized float                               |
@@ -612,6 +588,14 @@ always available.
    .. versionadded:: 3.7
 
 
+.. function:: getcheckinterval()
+
+   Return the interpreter's "check interval"; see :func:`setcheckinterval`.
+
+   .. deprecated:: 3.2
+      Use :func:`getswitchinterval` instead.
+
+
 .. function:: getdefaultencoding()
 
    Return the name of the current default string encoding used by the Unicode
@@ -630,24 +614,30 @@ always available.
 
 .. function:: getfilesystemencoding()
 
-   Get the :term:`filesystem encoding <filesystem encoding and error handler>`:
-   the encoding used with the :term:`filesystem error handler <filesystem
-   encoding and error handler>` to convert between Unicode filenames and bytes
-   filenames. The filesystem error handler is returned from
-   :func:`getfilesystemencoding`.
+   Return the name of the encoding used to convert between Unicode
+   filenames and bytes filenames. For best compatibility, str should be
+   used for filenames in all cases, although representing filenames as bytes
+   is also supported. Functions accepting or returning filenames should support
+   either str or bytes and internally convert to the system's preferred
+   representation.
 
-   For best compatibility, str should be used for filenames in all cases,
-   although representing filenames as bytes is also supported. Functions
-   accepting or returning filenames should support either str or bytes and
-   internally convert to the system's preferred representation.
+   This encoding is always ASCII-compatible.
 
    :func:`os.fsencode` and :func:`os.fsdecode` should be used to ensure that
    the correct encoding and errors mode are used.
 
-   The :term:`filesystem encoding and error handler` are configured at Python
-   startup by the :c:func:`PyConfig_Read` function: see
-   :c:member:`~PyConfig.filesystem_encoding` and
-   :c:member:`~PyConfig.filesystem_errors` members of :c:type:`PyConfig`.
+   * In the UTF-8 mode, the encoding is ``utf-8`` on any platform.
+
+   * On macOS, the encoding is ``'utf-8'``.
+
+   * On Unix, the encoding is the locale encoding.
+
+   * On Windows, the encoding may be ``'utf-8'`` or ``'mbcs'``, depending
+     on user configuration.
+
+   * On Android, the encoding is ``'utf-8'``.
+
+   * On VxWorks, the encoding is ``'utf-8'``.
 
    .. versionchanged:: 3.2
       :func:`getfilesystemencoding` result cannot be ``None`` anymore.
@@ -657,25 +647,17 @@ always available.
       and :func:`_enablelegacywindowsfsencoding` for more information.
 
    .. versionchanged:: 3.7
-      Return ``'utf-8'`` if the :ref:`Python UTF-8 Mode <utf8-mode>` is
-      enabled.
+      Return 'utf-8' in the UTF-8 mode.
 
 
 .. function:: getfilesystemencodeerrors()
 
-   Get the :term:`filesystem error handler <filesystem encoding and error
-   handler>`: the error handler used with the :term:`filesystem encoding
-   <filesystem encoding and error handler>` to convert between Unicode
-   filenames and bytes filenames. The filesystem encoding is returned from
+   Return the name of the error mode used to convert between Unicode filenames
+   and bytes filenames. The encoding name is returned from
    :func:`getfilesystemencoding`.
 
    :func:`os.fsencode` and :func:`os.fsdecode` should be used to ensure that
    the correct encoding and errors mode are used.
-
-   The :term:`filesystem encoding and error handler` are configured at Python
-   startup by the :c:func:`PyConfig_Read` function: see
-   :c:member:`~PyConfig.filesystem_encoding` and
-   :c:member:`~PyConfig.filesystem_errors` members of :c:type:`PyConfig`.
 
    .. versionadded:: 3.6
 
@@ -860,7 +842,7 @@ always available.
    +---------------------+--------------------------------------------------+
    | :const:`inf`        | hash value returned for a positive infinity      |
    +---------------------+--------------------------------------------------+
-   | :const:`nan`        | (this attribute is no longer used)               |
+   | :const:`nan`        | hash value returned for a nan                    |
    +---------------------+--------------------------------------------------+
    | :const:`imag`       | multiplier used for the imaginary part of a      |
    |                     | complex number                                   |
@@ -1073,21 +1055,7 @@ always available.
    This is a dictionary that maps module names to modules which have already been
    loaded.  This can be manipulated to force reloading of modules and other tricks.
    However, replacing the dictionary will not necessarily work as expected and
-   deleting essential items from the dictionary may cause Python to fail.  If
-   you want to iterate over this global dictionary always use
-   ``sys.modules.copy()`` or ``tuple(sys.modules)`` to avoid exceptions as its
-   size may change during iteration as a side effect of code or activity in
-   other threads.
-
-
-.. data:: orig_argv
-
-   The list of the original command line arguments passed to the Python
-   executable.
-
-   See also :data:`sys.argv`.
-
-   .. versionadded:: 3.10
+   deleting essential items from the dictionary may cause Python to fail.
 
 
 .. data:: path
@@ -1191,28 +1159,6 @@ always available.
       system's identity.
 
 
-.. data:: platlibdir
-
-   Name of the platform-specific library directory. It is used to build the
-   path of standard library and the paths of installed extension modules.
-
-   It is equal to ``"lib"`` on most platforms. On Fedora and SuSE, it is equal
-   to ``"lib64"`` on 64-bit platforms which gives the following ``sys.path``
-   paths (where ``X.Y`` is the Python ``major.minor`` version):
-
-   * ``/usr/lib64/pythonX.Y/``:
-     Standard library (like ``os.py`` of the :mod:`os` module)
-   * ``/usr/lib64/pythonX.Y/lib-dynload/``:
-     C extension modules of the standard library (like the :mod:`errno` module,
-     the exact filename is platform specific)
-   * ``/usr/lib/pythonX.Y/site-packages/`` (always use ``lib``, not
-     :data:`sys.platlibdir`): Third-party modules
-   * ``/usr/lib64/pythonX.Y/site-packages/``:
-     C extension modules of third-party packages
-
-   .. versionadded:: 3.9
-
-
 .. data:: prefix
 
    A string giving the site-specific directory prefix where the platform
@@ -1245,6 +1191,21 @@ always available.
    assigned to either variable, its :func:`str` is re-evaluated each time the
    interpreter prepares to read a new interactive command; this can be used to
    implement a dynamic prompt.
+
+
+.. function:: setcheckinterval(interval)
+
+   Set the interpreter's "check interval".  This integer value determines how often
+   the interpreter checks for periodic things such as thread switches and signal
+   handlers.  The default is ``100``, meaning the check is performed every 100
+   Python virtual instructions. Setting it to a larger value may increase
+   performance for programs using threads.  Setting it to a value ``<=`` 0 checks
+   every virtual instruction, maximizing responsiveness as well as overhead.
+
+   .. deprecated:: 3.2
+      This function doesn't have an effect anymore, as the internal logic for
+      thread switching and asynchronous tasks has been rewritten.  Use
+      :func:`setswitchinterval` instead.
 
 
 .. function:: setdlopenflags(n)
@@ -1477,15 +1438,11 @@ always available.
 
 .. function:: _enablelegacywindowsfsencoding()
 
-   Changes the :term:`filesystem encoding and error handler` to 'mbcs' and
-   'replace' respectively, for consistency with versions of Python prior to
-   3.6.
+   Changes the default filesystem encoding and errors mode to 'mbcs' and
+   'replace' respectively, for consistency with versions of Python prior to 3.6.
 
    This is equivalent to defining the :envvar:`PYTHONLEGACYWINDOWSFSENCODING`
    environment variable before launching Python.
-
-   See also :func:`sys.getfilesystemencoding` and
-   :func:`sys.getfilesystemencodeerrors`.
 
    .. availability:: Windows.
 
@@ -1509,8 +1466,9 @@ always available.
    returned by the :func:`open` function.  Their parameters are chosen as
    follows:
 
-   * The encoding and error handling are is initialized from
-     :c:member:`PyConfig.stdio_encoding` and :c:member:`PyConfig.stdio_errors`.
+   * The character encoding is platform-dependent.  Non-Windows
+     platforms use the locale encoding (see
+     :meth:`locale.getpreferredencoding()`).
 
      On Windows, UTF-8 is used for the console device.  Non-character
      devices such as disk files and pipes use the system locale
@@ -1518,7 +1476,7 @@ always available.
      devices such as NUL (i.e. where ``isatty()`` returns ``True``) use the
      value of the console input and output codepages at startup,
      respectively for stdin and stdout/stderr. This defaults to the
-     system :term:`locale encoding` if the process is not initially attached
+     system locale encoding if the process is not initially attached
      to a console.
 
      The special behaviour of the console can be overridden
@@ -1533,15 +1491,9 @@ always available.
      for the Windows console, this only applies when
      :envvar:`PYTHONLEGACYWINDOWSSTDIO` is also set.
 
-   * When interactive, the ``stdout`` stream is line-buffered. Otherwise,
-     it is block-buffered like regular text files.  The ``stderr`` stream
-     is line-buffered in both cases.  You can make both streams unbuffered
-     by passing the :option:`-u` command-line option or setting the
-     :envvar:`PYTHONUNBUFFERED` environment variable.
-
-   .. versionchanged:: 3.9
-      Non-interactive ``stderr`` is now line-buffered instead of fully
-      buffered.
+   * When interactive, ``stdout`` and ``stderr`` streams are line-buffered.
+     Otherwise, they are block-buffered like regular text files.  You can
+     override this value with the :option:`-u` command-line option.
 
    .. note::
 
@@ -1574,25 +1526,6 @@ always available.
        original values ``__stdin__``, ``__stdout__`` and ``__stderr__`` can be
        ``None``. It is usually the case for Windows GUI apps that aren't connected
        to a console and Python apps started with :program:`pythonw`.
-
-
-.. data:: stdlib_module_names
-
-   A frozenset of strings containing the names of standard library modules.
-
-   It is the same on all platforms. Modules which are not available on
-   some platforms and modules disabled at Python build are also listed.
-   All module kinds are listed: pure Python, built-in, frozen and extension
-   modules. Test modules are excluded.
-
-   For packages, only the main package is listed: sub-packages and sub-modules
-   are not listed. For example, the ``email`` package is listed, but the
-   ``email.mime`` sub-package and the ``email.message`` sub-module are not
-   listed.
-
-   See also the :attr:`sys.builtin_module_names` list.
-
-   .. versionadded:: 3.10
 
 
 .. data:: thread_info

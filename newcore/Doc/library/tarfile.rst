@@ -102,9 +102,6 @@ Some facts and figures:
    ``'x:bz2'``, :func:`tarfile.open` accepts the keyword argument
    *compresslevel* (default ``9``) to specify the compression level of the file.
 
-   For modes ``'w:xz'`` and ``'x:xz'``, :func:`tarfile.open` accepts the
-   keyword argument *preset* to specify the compression level of the file.
-
    For special purposes, there is a second format for *mode*:
    ``'filemode|[compression]'``.  :func:`tarfile.open` will return a :class:`TarFile`
    object that processes its data as a stream of blocks.  No random seeking will
@@ -163,10 +160,7 @@ Some facts and figures:
 .. function:: is_tarfile(name)
 
    Return :const:`True` if *name* is a tar archive file, that the :mod:`tarfile`
-   module can read. *name* may be a :class:`str`, file, or file-like object.
-
-   .. versionchanged:: 3.9
-      Support for file and file-like objects.
+   module can read.
 
 
 The :mod:`tarfile` module defines the following exceptions:
@@ -448,11 +442,10 @@ be finalized; only the internally used file object will be closed. See the
 
 .. method:: TarFile.extractfile(member)
 
-   Extract a member from the archive as a file object. *member* may be
-   a filename or a :class:`TarInfo` object. If *member* is a regular file or
-   a link, an :class:`io.BufferedReader` object is returned. For all other
-   existing members, :const:`None` is returned. If *member* does not appear
-   in the archive, :exc:`KeyError` is raised.
+   Extract a member from the archive as a file object. *member* may be a filename
+   or a :class:`TarInfo` object. If *member* is a regular file or a link, an
+   :class:`io.BufferedReader` object is returned. Otherwise, :const:`None` is
+   returned.
 
    .. versionchanged:: 3.3
       Return an :class:`io.BufferedReader` object.

@@ -783,7 +783,7 @@ For an example of the usage of queues for interprocess communication see
       multithreading/multiprocessing semantics, this number is not reliable.
 
       Note that this may raise :exc:`NotImplementedError` on Unix platforms like
-      macOS where ``sem_getvalue()`` is not implemented.
+      Mac OS X where ``sem_getvalue()`` is not implemented.
 
    .. method:: empty()
 
@@ -861,7 +861,7 @@ For an example of the usage of queues for interprocess communication see
 
       A better name for this method might be
       ``allow_exit_without_flush()``.  It is likely to cause enqueued
-      data to be lost, and you almost certainly will not need to use it.
+      data to lost, and you almost certainly will not need to use it.
       It is really only there if you need the current process to exit
       immediately without waiting to flush enqueued data to the
       underlying pipe, and you don't care about lost data.
@@ -878,16 +878,6 @@ For an example of the usage of queues for interprocess communication see
 .. class:: SimpleQueue()
 
    It is a simplified :class:`Queue` type, very close to a locked :class:`Pipe`.
-
-   .. method:: close()
-
-      Close the queue: release internal resources.
-
-      A queue must not be used anymore after it is closed. For example,
-      :meth:`get`, :meth:`put` and :meth:`empty` methods must no longer be
-      called.
-
-      .. versionadded:: 3.9
 
    .. method:: empty()
 
@@ -951,8 +941,7 @@ Miscellaneous
    use.  The number of usable CPUs can be obtained with
    ``len(os.sched_getaffinity(0))``
 
-   When the number of CPUs cannot be determined a :exc:`NotImplementedError`
-   is raised.
+   May raise :exc:`NotImplementedError`.
 
    .. seealso::
       :func:`os.cpu_count`
@@ -1194,7 +1183,6 @@ For example:
     >>> arr2
     array('i', [0, 1, 2, 3, 4, 0, 0, 0, 0, 0])
 
-.. _multiprocessing-recv-pickle-security:
 
 .. warning::
 
@@ -1241,7 +1229,7 @@ object -- see :ref:`multiprocessing-managers`.
    first argument is named *block*, as is consistent with :meth:`Lock.acquire`.
 
    .. note::
-      On macOS, this is indistinguishable from :class:`Semaphore` because
+      On Mac OS X, this is indistinguishable from :class:`Semaphore` because
       ``sem_getvalue()`` is not implemented on that platform.
 
 .. class:: Condition([lock])
@@ -1380,7 +1368,7 @@ object -- see :ref:`multiprocessing-managers`.
 
 .. note::
 
-   On macOS, ``sem_timedwait`` is unsupported, so calling ``acquire()`` with
+   On Mac OS X, ``sem_timedwait`` is unsupported, so calling ``acquire()`` with
    a timeout will emulate that function's behavior using a sleeping loop.
 
 .. note::
@@ -2153,7 +2141,7 @@ with the :class:`Pool` class.
       or by calling :meth:`close` and :meth:`terminate` manually. Failure to do this
       can lead to the process hanging on finalization.
 
-      Note that it is **not correct** to rely on the garbage collector to destroy the pool
+      Note that is **not correct** to rely on the garbage colletor to destroy the pool
       as CPython does not assure that the finalizer of the pool will be called
       (see :meth:`object.__del__` for more information).
 
@@ -2635,13 +2623,12 @@ handler type) for messages from different processes to get mixed up.
    inherited.
 
 .. currentmodule:: multiprocessing
-.. function:: log_to_stderr(level=None)
+.. function:: log_to_stderr()
 
    This function performs a call to :func:`get_logger` but in addition to
    returning the logger created by get_logger, it adds a handler which sends
    output to :data:`sys.stderr` using format
    ``'[%(levelname)s/%(processName)s] %(message)s'``.
-   You can modify ``levelname`` of the logger by passing a ``level`` argument.
 
 Below is an example session with logging turned on::
 

@@ -588,6 +588,9 @@ Buffered Streaming Protocols
 ----------------------------
 
 .. versionadded:: 3.7
+   **Important:** this has been added to asyncio in Python 3.7
+   *on a provisional basis*!  This is as an experimental API that
+   might be changed or removed completely in Python 3.8.
 
 Buffered Protocols can be used with any event loop method
 that supports `Streaming Protocols`_.
@@ -683,7 +686,7 @@ factories passed to the :meth:`loop.create_datagram_endpoint` method.
 Subprocess Protocols
 --------------------
 
-Subprocess Protocol instances should be constructed by protocol
+Datagram Protocol instances should be constructed by protocol
 factories passed to the :meth:`loop.subprocess_exec` and
 :meth:`loop.subprocess_shell` methods.
 

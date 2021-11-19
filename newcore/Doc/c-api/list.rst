@@ -22,13 +22,13 @@ List Objects
 .. c:function:: int PyList_Check(PyObject *p)
 
    Return true if *p* is a list object or an instance of a subtype of the list
-   type.  This function always succeeds.
+   type.
 
 
 .. c:function:: int PyList_CheckExact(PyObject *p)
 
    Return true if *p* is a list object, but not an instance of a subtype of
-   the list type.  This function always succeeds.
+   the list type.
 
 
 .. c:function:: PyObject* PyList_New(Py_ssize_t len)
@@ -142,3 +142,10 @@ List Objects
 
    Return a new tuple object containing the contents of *list*; equivalent to
    ``tuple(list)``.
+
+
+.. c:function:: int PyList_ClearFreeList()
+
+   Clear the free list. Return the total number of freed items.
+
+   .. versionadded:: 3.3

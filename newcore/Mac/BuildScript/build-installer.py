@@ -2,10 +2,6 @@
 """
 This script is used to build "official" universal installers on macOS.
 
-NEW for 3.10 and backports:
-- support universal2 variant with arm64 and x86_64 archs
-- enable clang optimizations when building on 10.15+
-
 NEW for 3.9.0 and backports:
 - 2.7 end-of-life issues:
     - Python 3 installs now update the Current version link
@@ -165,10 +161,8 @@ def getTargetCompilers():
         '10.4': ('gcc-4.0', 'g++-4.0'),
         '10.5': ('gcc', 'g++'),
         '10.6': ('gcc', 'g++'),
-        '10.7': ('gcc', 'g++'),
-        '10.8': ('gcc', 'g++'),
     }
-    return target_cc_map.get(DEPTARGET, ('clang', 'clang++') )
+    return target_cc_map.get(DEPTARGET, ('gcc', 'g++') )
 
 CC, CXX = getTargetCompilers()
 
@@ -239,6 +233,8 @@ THIRD_PARTY_LIBS = []
 #    command line options have been processed.]
 def library_recipes():
     result = []
+
+    LT_10_5 = bool(getDeptargetTuple() < (10, 5))
 
     # Since Apple removed the header files for the deprecated system
     # OpenSSL as of the Xcode 7 release (for OS X 10.10+), we do not
@@ -368,15 +364,55 @@ def library_recipes():
                             '-DSQLITE_ENABLE_FTS3_PARENTHESIS '
                             '-DSQLITE_ENABLE_JSON1 '
                             '-DSQLITE_ENABLE_RTREE '
-                            '-DSQLITE_OMIT_AUTOINIT '
                             '-DSQLITE_TCL=0 '
-                            ),
+                 '%s' % ('','-DSQLITE_WITHOUT_ZONEMALLOC ')[LT_10_5]),
               configure_pre=[
                   '--enable-threadsafe',
                   '--enable-shared=no',
                   '--enable-static=yes',
                   '--disable-readline',
                   '--disable-dependency-tracking',
+              ]
+          ),
+        ])
+
+    if getDeptargetTuple() < (10, 5):
+        result.extend([
+          dict(
+              name="Bzip2 1.0.6",
+              url="http://bzip.org/1.0.6/bzip2-1.0.6.tar.gz",
+              checksum='00b516f4704d4a7cb50a1d97e6e8e15b',
+              configure=None,
+              install='make install CC=%s CXX=%s, PREFIX=%s/usr/local/ CFLAGS="-arch %s"'%(
+                  CC, CXX,
+                  shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  ' -arch '.join(ARCHLIST),
+              ),
+          ),
+          dict(
+              name="ZLib 1.2.3",
+              url="http://www.gzip.org/zlib/zlib-1.2.3.tar.gz",
+              checksum='debc62758716a169df9f62e6ab2bc634',
+              configure=None,
+              install='make install CC=%s CXX=%s, prefix=%s/usr/local/ CFLAGS="-arch %s"'%(
+                  CC, CXX,
+                  shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  ' -arch '.join(ARCHLIST),
+              ),
+          ),
+          dict(
+              # Note that GNU readline is GPL'd software
+              name="GNU Readline 6.1.2",
+              url="http://ftp.gnu.org/pub/gnu/readline/readline-6.1.tar.gz" ,
+              checksum='fc2f7e714fe792db1ce6ddc4c9fb4ef3',
+              patchlevel='0',
+              patches=[
+                  # The readline maintainers don't do actual micro releases, but
+                  # just ship a set of patches.
+                  ('http://ftp.gnu.org/pub/gnu/readline/readline-6.1-patches/readline61-001',
+                   'c642f2e84d820884b0bf9fd176bc6c3f'),
+                  ('http://ftp.gnu.org/pub/gnu/readline/readline-6.1-patches/readline61-002',
+                   '1a76781a1ea734e831588285db7ec9b1'),
               ]
           ),
         ])
@@ -397,14 +433,6 @@ def library_recipes():
 
     return result
 
-def compilerCanOptimize():
-    """
-    Return True iff the default Xcode version can use PGO and LTO
-    """
-    # bpo-42235: The version check is pretty conservative, can be
-    # adjusted after testing
-    mac_ver = tuple(map(int, platform.mac_ver()[0].split('.')))
-    return mac_ver >= (10, 15)
 
 # Instructions for building packages inside the .mpkg.
 def pkg_recipes():
@@ -454,7 +482,7 @@ def pkg_recipes():
             source="/pydocs",
             readme="""\
                 This package installs the python documentation at a location
-                that is usable for pydoc and IDLE.
+                that is useable for pydoc and IDLE.
                 """,
             postflight="scripts/postflight.documentation",
             required=False,
@@ -1145,7 +1173,6 @@ def buildPython():
                "%s "
                "%s "
                "%s "
-               "%s "
                "LDFLAGS='-g -L%s/libraries/usr/local/lib' "
                "CFLAGS='-g -I%s/libraries/usr/local/include' 2>&1"%(
         shellQuote(os.path.join(SRCDIR, 'configure')),
@@ -1158,7 +1185,6 @@ def buildPython():
                             shellQuote(WORKDIR)[1:-1],))[internalTk()],
         (' ', "--with-tcltk-libs='-L%s/libraries/usr/local/lib -ltcl8.6 -ltk8.6'"%(
                             shellQuote(WORKDIR)[1:-1],))[internalTk()],
-        (' ', "--enable-optimizations --with-lto")[compilerCanOptimize()],
         shellQuote(WORKDIR)[1:-1],
         shellQuote(WORKDIR)[1:-1]))
 
@@ -1602,7 +1628,7 @@ def buildDMG():
     # instead of 11.  We should not run into that situation here.)
     # Also we should use "macos" instead of "macosx" going forward.
     #
-    # To maintain compatibility for legacy variants, the file name for
+    # To maintain compability for legacy variants, the file name for
     # builds on macOS 10.15 and earlier remains:
     #   python-3.x.y-macosx10.z.{dmg->pkg}
     #   e.g. python-3.9.4-macosx10.9.{dmg->pkg}
