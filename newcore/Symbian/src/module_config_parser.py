@@ -16,10 +16,10 @@ import os
 import string
 import zipfile
 import modulefinder
-from ....tools import template_engine
-from ....tools import fileutil
-from ....tools.shellutil import *
-import test_module_dependency_cfg
+from tools import template_engine
+from tools import fileutil
+from tools.shellutil import *
+#import test_module_dependency_cfg
 
 base_modules_zip = "python38.zip"
 repo_modules_zip = "python38_repo.zip"
@@ -656,4 +656,4 @@ if __name__ == "__main__" or __name__ == "__builtin__":
         fp.write("}")
         fp.close()
         # Run the module_dependency_cfg test
-        test_module_dependency_cfg.test_main()
+        # test_module_dependency_cfg.test_main()
