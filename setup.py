@@ -13,142 +13,148 @@
 # limitations under the License.
 
 import sys
-import base64
-if sys.version_info < (2, 4):
-    print "Python 2.4 or later required."
+
+if sys.version_info < (3, 8):
+    print("Python 3.8 or later required.")
     sys.exit(2)
 import os
-from subprocess import *
-import thread
 from threading import Thread
 import re
 import imp
 import compileall
 import traceback
-from zipfile import ZipFile
 import time
-import glob
-import itertools
-import string
 from optparse import OptionParser
+from tools import fileutil
+from tools import template_engine
+from tools.shellutil import *
+from newcore.Symbian.src import module_config_parser
+from newcore.Lib.posixfile import _posixfile_
+from newcore.Lib.idlelib.pyshell import execfile
+
+file = _posixfile_.file
 
 topdir = os.getcwd()
-testdata_dir = '.\\build\\test'
-testdir = os.path.abspath(os.path.join(topdir,
-                                       '..\\test\\automatic\\standard'))
-sys.path.append(os.path.join(topdir, 'tools'))
-sys.path.append(os.path.join(topdir, 'newcore\\Symbian\\src'))
-
-import fileutil
-import template_engine
-import module_config_parser
-from shellutil import *
+testdata_dir = ".\\build\\test"
+testdir = os.path.abspath(os.path.join(topdir, "..\\test\\automatic\\standard"))
+sys.path.append(os.path.join(topdir, "tools"))
+sys.path.append(os.path.join(topdir, "newcore\\Symbian\\src"))
 
 internal_proj = False
 
 # Specify the magic number of the Python interpreter used in PyS60.
-pys60_magic_number = '\xb3\xf2\r\n'
+pys60_magic_number = "\xb3\xf2\r\n"
 
-projects = [{'name': 'python25',
-             'path': 'newcore\\symbian\\group',
-             'internal': False},
-            {'name': 'testapp',
-             'path': 'ext\\test\\testapp\\group',
-             'internal': False},
-            {'name': 'run_testapp',
-             'path': 'ext\\test\\run_testapp\\group',
-             'internal': True},
-            {'name': 'run-interpretertimer',
-             'path': 'ext\\test\\run-interpretertimer\\group',
-             'internal': True},
-            {'name': 'interpreter-startup',
-             'path': 'ext\\test\\interpreter-startup\\group',
-             'internal': True}]
+projects = [
+    {"name": "python25", "path": "newcore\\symbian\\group", "internal": False},
+    {"name": "testapp", "path": "ext\\test\\testapp\\group", "internal": False},
+    {"name": "run_testapp", "path": "ext\\test\\run_testapp\\group", "internal": True},
+    {
+        "name": "run-interpretertimer",
+        "path": "ext\\test\\run-interpretertimer\\group",
+        "internal": True,
+    },
+    {
+        "name": "interpreter-startup",
+        "path": "ext\\test\\interpreter-startup\\group",
+        "internal": True,
+    },
+]
 
-
-
-buildconfig_defaults={'PYS60_VERSION_MAJOR': 2,
-                      'PYS60_VERSION_MINOR': 0,
-                      'PYS60_VERSION_MICRO': 0,
-                      # The default tag for a build is based on the
-                      # time the configuration script was run. To make
-                      # a build that claims to be a "release" build
-                      # you need to specify a PYS60_VERSION_TAG
-                      # explicitly.
-                      'PYS60_VERSION_TAG': time.strftime(
-                                           "development_build_%Y%m%d_%H%M"),
-                      'PYS60_RELEASE_DATE': time.strftime("%d %b %Y"),
-                      'PY_CORE_VERSION': '2.5.4',
-                      'PY_ON_BUILD_SERVER': '2.5.1',
-                      'PYS60_VERSION_SERIAL': 0,
-                      'EMU_BUILD': 'udeb',
-                      'DEVICE_PLATFORM': 'armv5',
-                      'DEVICE_BUILD': 'urel',
-                      'SRC_DIR': topdir,
-                      'TEST_DIR': testdir,
-                      'PROJECTS': projects,
-                      'INTERNAL_PROJ': internal_proj,
-                      'COMPILER_FLAGS': '',
-                      'TEST_FLAG': 'OFF',
-                      'EXTRA_SYSTEMINCLUDE_DIRS': [],
-                      'WITH_MESSAGING_MODULE': 1,
-                      'WITH_LOCATION_MODULE': 1,
-                      'WITH_SENSOR_MODULE': 1,
-                      'PREFIX': 'kf_',
-                      'INCLUDE_ARMV5_PYDS': False,
-                      'CTC_COVERAGE': False,
-                      # UIDs 10201510 to 10201519 inclusive, allocated for
-                      # PyS60 1.4.x
-                      'PYS60_UID_CORE': '0x20022EE8',
-                      'PYS60_UID_S60': '0x10201510',
-                      'PYS60_UID_LAUNCHER': '0x20022EF0',
-                      'PYS60_UID_TESTAPP': '0xF0201517',
-                      'PYS60_UID_RUNTESTAPP': '0xF0201518',
-                      'PYS60_UID_PYTHONUI': '0xF020151B',
-                      'PYS60_UID_PYREPL': '0x10201519',
-                      'OMAP2420': 0}
+buildconfig_defaults = {
+    "PYS60_VERSION_MAJOR": 2,
+    "PYS60_VERSION_MINOR": 0,
+    "PYS60_VERSION_MICRO": 0,
+    # The default tag for a build is based on the
+    # time the configuration script was run. To make
+    # a build that claims to be a "release" build
+    # you need to specify a PYS60_VERSION_TAG
+    # explicitly.
+    "PYS60_VERSION_TAG": time.strftime("development_build_%Y%m%d_%H%M"),
+    "PYS60_RELEASE_DATE": time.strftime("%d %b %Y"),
+    "PY_CORE_VERSION": "2.5.4",
+    "PY_ON_BUILD_SERVER": "2.5.1",
+    "PYS60_VERSION_SERIAL": 0,
+    "EMU_BUILD": "udeb",
+    "DEVICE_PLATFORM": "armv5",
+    "DEVICE_BUILD": "urel",
+    "SRC_DIR": topdir,
+    "TEST_DIR": testdir,
+    "PROJECTS": projects,
+    "INTERNAL_PROJ": internal_proj,
+    "COMPILER_FLAGS": "",
+    "TEST_FLAG": "OFF",
+    "EXTRA_SYSTEMINCLUDE_DIRS": [],
+    "WITH_MESSAGING_MODULE": 1,
+    "WITH_LOCATION_MODULE": 1,
+    "WITH_SENSOR_MODULE": 1,
+    "PREFIX": "kf_",
+    "INCLUDE_ARMV5_PYDS": False,
+    "CTC_COVERAGE": False,
+    # UIDs 10201510 to 10201519 inclusive, allocated for
+    # PyS60 1.4.x
+    "PYS60_UID_CORE": "0x20022EE8",
+    "PYS60_UID_S60": "0x10201510",
+    "PYS60_UID_LAUNCHER": "0x20022EF0",
+    "PYS60_UID_TESTAPP": "0xF0201517",
+    "PYS60_UID_RUNTESTAPP": "0xF0201518",
+    "PYS60_UID_PYTHONUI": "0xF020151B",
+    "PYS60_UID_PYREPL": "0x10201519",
+    "OMAP2420": 0,
+}
 
 buildconfig_sdks = {
-    '30armv5': {'S60_VERSION': 30,
-           'DEVICE_PLATFORM': 'armv5',
-           'EMU_PLATFORM': 'winscw',
-           'SDK_NAME': 'S60 3rd Ed. w/ RVCT compiler',
-           'SDK_MARKETING_VERSION_SHORT': '3rdEd',
-           'PYS60_UID_SCRIPTSHELL': '0x20022EED',
-           'S60_REQUIRED_PLATFORM_UID': '0x101F7961'},
-    '30gcce': {'S60_VERSION': 30,
-           'DEVICE_PLATFORM': 'gcce',
-           'EMU_PLATFORM': 'winscw',
-           'PYS60_UID_SCRIPTSHELL': '0x20022EED',
-           'SDK_NAME': 'S60 3rd Ed. w/ GCCE compiler',
-           'SDK_MARKETING_VERSION_SHORT': '3rdEd',
-           'S60_REQUIRED_PLATFORM_UID': '0x101F7961'},
-    '32': {'S60_VERSION': 32,
-           'DEVICE_PLATFORM': 'armv5',
-           'EMU_PLATFORM': 'winscw',
-           'PYS60_UID_SCRIPTSHELL': '0x20022EEC',
-           'SDK_NAME': 'S60 3rd EdFP2  w/ RVCT compiler',
-           'SDK_MARKETING_VERSION_SHORT': '3rdEdFP2',
-           'S60_REQUIRED_PLATFORM_UID': '0x102752AE'},
-    '32gcce': {'S60_VERSION': 32,
-           'DEVICE_PLATFORM': 'gcce',
-           'EMU_PLATFORM': 'winscw',
-           'PYS60_UID_SCRIPTSHELL': '0x20022EEC',
-           'SDK_NAME': 'S60 3rd EdFP2  w/ GCCE compiler',
-           'SDK_MARKETING_VERSION_SHORT': '3rdEdFP2',
-           'S60_REQUIRED_PLATFORM_UID': '0x102752AE'},
-    '50armv5': {'S60_VERSION': 50,
-           'DEVICE_PLATFORM': 'armv5',
-           'EMU_PLATFORM': 'winscw',
-           'PYS60_UID_SCRIPTSHELL': '0x20022EEC',
-           'SDK_NAME': 'S60 5th Ed  w/ RVCT compiler',
-           'SDK_MARKETING_VERSION_SHORT': '5thEd',
-           'S60_REQUIRED_PLATFORM_UID': '0x1028315F'}}
+    "30armv5": {
+        "S60_VERSION": 30,
+        "DEVICE_PLATFORM": "armv5",
+        "EMU_PLATFORM": "winscw",
+        "SDK_NAME": "S60 3rd Ed. w/ RVCT compiler",
+        "SDK_MARKETING_VERSION_SHORT": "3rdEd",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EED",
+        "S60_REQUIRED_PLATFORM_UID": "0x101F7961",
+    },
+    "30gcce": {
+        "S60_VERSION": 30,
+        "DEVICE_PLATFORM": "gcce",
+        "EMU_PLATFORM": "winscw",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EED",
+        "SDK_NAME": "S60 3rd Ed. w/ GCCE compiler",
+        "SDK_MARKETING_VERSION_SHORT": "3rdEd",
+        "S60_REQUIRED_PLATFORM_UID": "0x101F7961",
+    },
+    "32": {
+        "S60_VERSION": 32,
+        "DEVICE_PLATFORM": "armv5",
+        "EMU_PLATFORM": "winscw",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EEC",
+        "SDK_NAME": "S60 3rd EdFP2  w/ RVCT compiler",
+        "SDK_MARKETING_VERSION_SHORT": "3rdEdFP2",
+        "S60_REQUIRED_PLATFORM_UID": "0x102752AE",
+    },
+    "32gcce": {
+        "S60_VERSION": 32,
+        "DEVICE_PLATFORM": "gcce",
+        "EMU_PLATFORM": "winscw",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EEC",
+        "SDK_NAME": "S60 3rd EdFP2  w/ GCCE compiler",
+        "SDK_MARKETING_VERSION_SHORT": "3rdEdFP2",
+        "S60_REQUIRED_PLATFORM_UID": "0x102752AE",
+    },
+    "50armv5": {
+        "S60_VERSION": 50,
+        "DEVICE_PLATFORM": "armv5",
+        "EMU_PLATFORM": "winscw",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EEC",
+        "SDK_NAME": "S60 5th Ed  w/ RVCT compiler",
+        "SDK_MARKETING_VERSION_SHORT": "5thEd",
+        "S60_REQUIRED_PLATFORM_UID": "0x1028315F",
+    },
+}
 
 # 0 if missing files in SDK zip packaging are not allowed
 allow_missing = 0
 
-BUILDCONFIG_FILE = os.path.join(topdir, 'build.cfg')
+BUILDCONFIG_FILE = os.path.join(topdir, "build.cfg")
 
 
 def buildconfig_exists():
@@ -158,13 +164,13 @@ def buildconfig_exists():
 def buildconfig_load():
     global BUILDCONFIG
     if buildconfig_exists():
-        BUILDCONFIG = eval(open(BUILDCONFIG_FILE, 'rt').read())
+        BUILDCONFIG = eval(open(BUILDCONFIG_FILE, "rt").read())
     else:
         raise BuildFailedException("Source not configured")
 
 
 def buildconfig_save():
-    open(BUILDCONFIG_FILE, 'wt').write(repr(BUILDCONFIG))
+    open(BUILDCONFIG_FILE, "wt").write(repr(BUILDCONFIG))
 
 
 def buildconfig_clean():
@@ -176,68 +182,69 @@ def get_project_details(params):
     buildconfig_load()
     requested_detail = []
     for project in projects:
-        if not project['internal'] or BUILDCONFIG['INTERNAL_PROJ']:
+        if not project["internal"] or BUILDCONFIG["INTERNAL_PROJ"]:
             requested_detail.append(project[params])
 
     return requested_detail
 
 
 def scanlog(log):
-    analysis = run_shell_command('perl \\epoc32\\tools\\scanlog.pl', log)
-    m = re.search(r'^Total\s+[0-9:]+\s+([0-9]+)\s+([0-9]+)',
-                  analysis['stdout'], re.M)
+    analysis = run_shell_command("perl \\epoc32\\tools\\scanlog.pl", log)
+    m = re.search(r"^Total\s+[0-9:]+\s+([0-9]+)\s+([0-9]+)", analysis["stdout"], re.M)
     if m:
-        return {'analysis': analysis,
-                'errors': int(m.group(1)),
-                'warnings': int(m.group(2))}
+        return {
+            "analysis": analysis,
+            "errors": int(m.group(1)),
+            "warnings": int(m.group(2)),
+        }
     else:
-        raise Exception('scanlog.pl failed')
+        raise Exception("scanlog.pl failed")
 
 
 def run_command_and_check_log(cmd, verbose=1, ignore_errors=0):
-    print 'Running "%s"' % cmd
+    print(f'Running "{cmd}"')
     try:
         out = run_shell_command(cmd, mixed_stderr=1, verbose=verbose)
         n_errors = 0
-        scanlog_result = scanlog(out['stdout'])
-        n_errors = scanlog_result['errors']
+        scanlog_result = scanlog(out["stdout"])
+        n_errors = scanlog_result["errors"]
     except:
         if ignore_errors:
-            print 'Ignoring exception "%s" raised by command "%s"' \
-            %(traceback.format_exception_only(sys.exc_info()[0], \
-            sys.exc_info()[1]), cmd)
+            print(
+                "Ignoring exception "
+                f'"{traceback.format_exception_only(sys.exc_info()[0], sys.exc_info()[1])}" '
+                f'raised by command "{cmd}"'
+            )
             return
         raise
     if n_errors > 0:
         if ignore_errors:
-            print 'Ignoring errors of command "%s"' % cmd
+            print(f'Ignoring errors of command "{cmd}"')
         else:
-            raise BuildFailedException('Command "%s" failed:\n%s' \
-                                        % (cmd, out['stdout']))
+            raise BuildFailedException(f'Command "{cmd}" failed:\n' f'{out["stdout"]}')
 
 
 def enter(dir):
     absdir = os.path.join(topdir, dir)
-    print 'Entering "%s"' % absdir
+    print(f'Entering "{absdir}"')
     os.chdir(absdir)
 
 
 def run_in(relative_dir, cmd, verbose=1, ignore_errors=0):
     curr_dir = os.getcwd()
     enter(relative_dir)
-    run_command_and_check_log(cmd, verbose=verbose,
-                              ignore_errors=ignore_errors)
+    run_command_and_check_log(cmd, verbose=verbose, ignore_errors=ignore_errors)
     os.chdir(curr_dir)
 
 
 def parse_assignments(params):
     d = {}
     for item in params:
-        (name, value) = item.split('=')
+        (name, value) = item.split("=")
         try:
             value = int(value)
         except ValueError:
-            pass # not an integer
+            pass  # not an integer
         d[name] = value
     return d
 
@@ -247,226 +254,306 @@ def cmd_configure(params):
     BUILDCONFIG = {}
     BUILDCONFIG.update(buildconfig_defaults)
     parser = OptionParser()
-    parser.add_option("-p", "--profile_log", dest="profile",
-            action="store_true", default=False,
-            help="Profile log generator for python [default: %default]")
-    parser.add_option("-v", "--version", dest="version", default='2.0.0',
-            help="Python release version [default: %default]")
-    parser.add_option("--compiler-flags", dest="compiler_flags",
-            default='',
-            help="Compiler flags to be used while building the python" +
-                 " interpreter core [default: %default]")
-    parser.add_option("--internal-projects", dest="internal_proj",
-            action="store_true", default=False,
-            help="Builds internal projects like 'interpreter-startup, " +
-                 "run_testapp etc...  [default: %default]")
-    parser.add_option("--version-tag", dest="version_tag", default='final',
-            help="Specify release tag [default: %default]")
-    parser.add_option("-s", "--sdk", dest="sdk", default='50armv5',
-            help="Specify the version of sdk to use, choose any version " +
-                 "from %s"%",".join(buildconfig_sdks.keys()) +
-                 "[default: %default]")
-    parser.add_option("-c", "--caps", dest="dll_caps",
-            default='LocalServices NetworkServices ReadUserData ' +
-                    'WriteUserData UserEnvironment Location',
-            help="Specify DLL capability within quotes [default: %default]")
-    parser.add_option("--debug-device", dest="debug_device",
-            action='store_true',
-            help="Build device builds in debug mode.")
-    parser.add_option("--include-internal-src", action='store_true',
-            dest="include_internal_src", default=False,
-            help="Include the source under ..\internal-src for build." +
-                 " [default: %default]")
-    parser.add_option("--exe-caps", dest="exe_caps",
-            help="Specify EXEs capability within quotes. " +
-                 "If nothing is specified this will be same as DLL " +
-                 "capabilities")
-    parser.add_option("--compression-type",
-            default='', dest="compression_type",
-            help="Modify the compression type of all the " +
-                 "E32Image files generated, using 'elftran " +
-                 "-compressionmethod'. Refer elftran help for valid " +
-                 "compression types. If the type is given as '', " +
-                 "elftran is not invoked for modifying the compression type." +
-                 " [default: '']")
-    parser.add_option("-k", "--key", dest="key",
-            help="Specify key name," +
-                 " [default:  NONE] - packages are left unsigned")
-    parser.add_option("--keydir", dest="keydir", default='..\\keys',
-            help="Specify key path [default: %default])")
-    parser.add_option("--do-not-compile-pyfiles",
-            dest="do_not_compile_pyfiles", action="store_true", default=False,
-            help="Do not compile the .py files under src. You can disable the "
-                 "compilation if the Python version on the host system is not "
-                 "bytecode compatible with the Python used in PyS60 "
-                 "[default: %default]")
-    parser.add_option("--build-profile",
-            dest="build_profile", default='integration',
-            help="Use this option to set the build_config variable, "
-                 "BUILD_PROFILE to 'integration' or 'release'. BUILD_PROFILE "
-                 "can then be used in the template processing. "
-                 "[default: %default]")
+    parser.add_option(
+        "-p",
+        "--profile_log",
+        dest="profile",
+        action="store_true",
+        default=False,
+        help="Profile log generator for python [default: %default]",
+    )
+    parser.add_option(
+        "-v",
+        "--version",
+        dest="version",
+        default="2.0.0",
+        help="Python release version [default: %default]",
+    )
+    parser.add_option(
+        "--compiler-flags",
+        dest="compiler_flags",
+        default="",
+        help="Compiler flags to be used while building the python"
+        + " interpreter core [default: %default]",
+    )
+    parser.add_option(
+        "--internal-projects",
+        dest="internal_proj",
+        action="store_true",
+        default=False,
+        help="Builds internal projects like 'interpreter-startup, "
+        + "run_testapp etc...  [default: %default]",
+    )
+    parser.add_option(
+        "--version-tag",
+        dest="version_tag",
+        default="final",
+        help="Specify release tag [default: %default]",
+    )
+    parser.add_option(
+        "-s",
+        "--sdk",
+        dest="sdk",
+        default="50armv5",
+        help="Specify the version of sdk to use, choose any version "
+        + "from %s" % ",".join(buildconfig_sdks.keys())
+        + "[default: %default]",
+    )
+    parser.add_option(
+        "-c",
+        "--caps",
+        dest="dll_caps",
+        default="LocalServices NetworkServices ReadUserData "
+        + "WriteUserData UserEnvironment Location",
+        help="Specify DLL capability within quotes [default: %default]",
+    )
+    parser.add_option(
+        "--debug-device",
+        dest="debug_device",
+        action="store_true",
+        help="Build device builds in debug mode.",
+    )
+    parser.add_option(
+        "--include-internal-src",
+        action="store_true",
+        dest="include_internal_src",
+        default=False,
+        help="Include the source under ..\internal-src for build."
+        + " [default: %default]",
+    )
+    parser.add_option(
+        "--exe-caps",
+        dest="exe_caps",
+        help="Specify EXEs capability within quotes. "
+        + "If nothing is specified this will be same as DLL "
+        + "capabilities",
+    )
+    parser.add_option(
+        "--compression-type",
+        default="",
+        dest="compression_type",
+        help="Modify the compression type of all the "
+        + "E32Image files generated, using 'elftran "
+        + "-compressionmethod'. Refer elftran help for valid "
+        + "compression types. If the type is given as '', "
+        + "elftran is not invoked for modifying the compression type."
+        + " [default: '']",
+    )
+    parser.add_option(
+        "-k",
+        "--key",
+        dest="key",
+        help="Specify key name," + " [default:  NONE] - packages are left unsigned",
+    )
+    parser.add_option(
+        "--keydir",
+        dest="keydir",
+        default="..\\keys",
+        help="Specify key path [default: %default])",
+    )
+    parser.add_option(
+        "--do-not-compile-pyfiles",
+        dest="do_not_compile_pyfiles",
+        action="store_true",
+        default=False,
+        help="Do not compile the .py files under src. You can disable the "
+        "compilation if the Python version on the host system is not "
+        "bytecode compatible with the Python used in PyS60 "
+        "[default: %default]",
+    )
+    parser.add_option(
+        "--build-profile",
+        dest="build_profile",
+        default="integration",
+        help="Use this option to set the build_config variable, "
+        "BUILD_PROFILE to 'integration' or 'release'. BUILD_PROFILE "
+        "can then be used in the template processing. "
+        "[default: %default]",
+    )
 
     (options, args) = parser.parse_args()
 
-    if not options.do_not_compile_pyfiles and \
-                                      pys60_magic_number != imp.get_magic():
-        raise SystemError("Not compiling the .py files: " + \
-              "Python version(%s) " % sys.version.split()[0] + \
-              "not bytecode compatible with the Python version " + \
-              "used in PyS60(%s)." % BUILDCONFIG['PY_ON_BUILD_SERVER'])
+    if not options.do_not_compile_pyfiles and pys60_magic_number != imp.get_magic():
+        raise SystemError(
+            "Not compiling the .py files: "
+            + "Python version(%s) " % sys.version.split()[0]
+            + "not bytecode compatible with the Python version "
+            + "used in PyS60(%s)." % BUILDCONFIG["PY_ON_BUILD_SERVER"]
+        )
 
     if options.sdk not in buildconfig_sdks:
-        print 'Unsupported SDK configuration "%s"' % options.sdk
+        print(f'Unsupported SDK configuration "{options.sdk}"')
         sys.exit(2)
 
     # Find out if coverage called configure. There are chances that the cfg
     # file is missing or CTC_COVERAGE key is not present. We just ignore it.
     try:
-        BUILDCONFIG_temp = eval(open(BUILDCONFIG_FILE, 'rt').read())
-        if BUILDCONFIG_temp['CTC_COVERAGE']:
-            BUILDCONFIG['CTC_COVERAGE'] = True
+        BUILDCONFIG_temp = eval(open(BUILDCONFIG_FILE, "rt").read())
+        if BUILDCONFIG_temp["CTC_COVERAGE"]:
+            BUILDCONFIG["CTC_COVERAGE"] = True
     except:
         pass
-    BUILDCONFIG['PYS60_VERSION_NUM'] = options.version
-    BUILDCONFIG['PYS60_VERSION'] = '%s %s' %(options.version,
-                                             options.version_tag)
-    [major, minor, micro] = options.version.split('.')
-    BUILDCONFIG['PYS60_VERSION_MAJOR'] = major
-    BUILDCONFIG['PYS60_VERSION_MINOR'] = minor
-    BUILDCONFIG['PYS60_VERSION_MICRO'] = micro
-    BUILDCONFIG['BUILD_PROFILE'] = options.build_profile
+    BUILDCONFIG["PYS60_VERSION_NUM"] = options.version
+    BUILDCONFIG["PYS60_VERSION"] = "%s %s" % (options.version, options.version_tag)
+    [major, minor, micro] = options.version.split(".")
+    BUILDCONFIG["PYS60_VERSION_MAJOR"] = major
+    BUILDCONFIG["PYS60_VERSION_MINOR"] = minor
+    BUILDCONFIG["PYS60_VERSION_MICRO"] = micro
+    BUILDCONFIG["BUILD_PROFILE"] = options.build_profile
     if options.compiler_flags:
-        BUILDCONFIG['COMPILER_FLAGS'] = "OPTION " \
-        + options.compiler_flags
+        BUILDCONFIG["COMPILER_FLAGS"] = "OPTION " + options.compiler_flags
         log_file = topdir + "\\build\\regrtest_emulator_x86.log"
         if os.path.exists(log_file):
-            open(log_file, "a+").write("\n" +
-                "Build Info -- Name : <Compiler Flags>, Value : <" +
-                options.compiler_flags + ">")
+            open(log_file, "a+").write(
+                "\n"
+                + "Build Info -- Name : <Compiler Flags>, Value : <"
+                + options.compiler_flags
+                + ">"
+            )
             # Running it again to get the compiler tags into the XML. In the
             # future when new build info metrics will be added, this can be
             # run at the end after appending all the values to emu log.
-            run_cmd('python tools\\regrtest_log_to_cruisecontrol.py ' +
-                    ' regrtest_emulator_x86.log')
-    BUILDCONFIG['PYS60_VERSION_TAG'] = options.version_tag
-    BUILDCONFIG['PROFILE_LOG'] = options.profile
+            run_cmd(
+                "python tools\\regrtest_log_to_cruisecontrol.py "
+                + " regrtest_emulator_x86.log"
+            )
+    BUILDCONFIG["PYS60_VERSION_TAG"] = options.version_tag
+    BUILDCONFIG["PROFILE_LOG"] = options.profile
     buildconfig_save()
     if options.key:
-        BUILDCONFIG['SIGN_KEY'] = options.keydir + '\\' + \
-        '%s' % options.key + '.key'
-        BUILDCONFIG['SIGN_CERT'] = options.keydir + '\\' + \
-        '%s' % options.key + '.crt'
-        BUILDCONFIG['SIGN_PASS'] = ''
-    BUILDCONFIG['DLL_CAPABILITIES'] = options.dll_caps
+        BUILDCONFIG["SIGN_KEY"] = options.keydir + "\\" + "%s" % options.key + ".key"
+        BUILDCONFIG["SIGN_CERT"] = options.keydir + "\\" + "%s" % options.key + ".crt"
+        BUILDCONFIG["SIGN_PASS"] = ""
+    BUILDCONFIG["DLL_CAPABILITIES"] = options.dll_caps
     if not options.exe_caps:
-        BUILDCONFIG['EXE_CAPABILITIES'] = options.dll_caps
+        BUILDCONFIG["EXE_CAPABILITIES"] = options.dll_caps
     else:
-        BUILDCONFIG['EXE_CAPABILITIES'] = options.exe_caps
-    BUILDCONFIG['COMPRESSION_TYPE'] = options.compression_type
+        BUILDCONFIG["EXE_CAPABILITIES"] = options.exe_caps
+    BUILDCONFIG["COMPRESSION_TYPE"] = options.compression_type
     BUILDCONFIG.update(buildconfig_sdks[options.sdk])
     if options.debug_device:
-        print "Configuring the device build as debug(UDEB)"
-        BUILDCONFIG['DEVICE_BUILD'] = 'udeb'
+        print("Configuring the device build as debug(UDEB)")
+        BUILDCONFIG["DEVICE_BUILD"] = "udeb"
     if options.internal_proj:
         global INTERNAL_PROJ
-        BUILDCONFIG['INTERNAL_PROJ'] = True
+        BUILDCONFIG["INTERNAL_PROJ"] = True
 
-    BUILDCONFIG['INCLUDE_INTERNAL_SRC'] = options.include_internal_src
-    BUILDCONFIG['MOD_REPO'] = False
+    BUILDCONFIG["INCLUDE_INTERNAL_SRC"] = options.include_internal_src
+    BUILDCONFIG["MOD_REPO"] = False
 
-    print "Configuring for %s" % options.sdk
+    print(f"Configuring for {options.sdk}")
     buildconfig_save()
     # Check if a directory for build dependencies was given
-    if 'BUILD_DEPS' in BUILDCONFIG:
+    if "BUILD_DEPS" in BUILDCONFIG:
         # Form the build dependencies include directory path. The
         # drive letter and colon are stripped from the path since the
         # Symbian build system doesn't understand drive letters in
         # paths.
-        builddep_includes = os.path.abspath(os.path.join(
-                            BUILDCONFIG['BUILD_DEPS'], BUILDCONFIG['SDK_TAG'],
-                            'include'))[2:]
+        builddep_includes = os.path.abspath(
+            os.path.join(BUILDCONFIG["BUILD_DEPS"], BUILDCONFIG["SDK_TAG"], "include")
+        )[2:]
         if os.path.exists(builddep_includes):
-            print "Adding extra include directory %s" % builddep_includes
-            BUILDCONFIG['EXTRA_SYSTEMINCLUDE_DIRS'].append(builddep_includes)
+            print(f"Adding extra include directory {builddep_includes}")
+            BUILDCONFIG["EXTRA_SYSTEMINCLUDE_DIRS"].append(builddep_includes)
     buildconfig_save()
-    print "Build configuration:"
+    print("Build configuration:")
     for name, value in sorted(BUILDCONFIG.items()):
-        print "  %s=%s" % (name, repr(value))
-    BUILDCONFIG['ConfigureError'] = ConfigureError
+        print(f"  {name}={repr(value)}")
+    BUILDCONFIG["ConfigureError"] = ConfigureError
 
-    build_dirs = ['']
+    build_dirs = [""]
     if options.include_internal_src:
-        build_dirs.append('..\\internal-src')
-        build_dirs.append('..\\extraprojs')
+        build_dirs.append("..\\internal-src")
+        build_dirs.append("..\\extraprojs")
     if not options.do_not_compile_pyfiles:
-        compileall.compile_dir('newcore\\Lib', rx=re.compile('/[.]svn'))
+        compileall.compile_dir("newcore\\Lib", rx=re.compile("/[.]svn"))
     prev_dir = os.getcwd()
-    os.chdir('newcore\\Symbian\\src')
-    execfile('module_config_parser.py', BUILDCONFIG)
+    os.chdir("newcore\\Symbian\\src")
+    execfile("module_config_parser.py", BUILDCONFIG)
     os.chdir(prev_dir)
 
     # Go through all directories that have template files that need processing.
     for dir_ in build_dirs:
-        for f in fileutil.all_files(dir_, '*.in'):
+        for f in fileutil.all_files(dir_, "*.in"):
             # Omit newcore from template processing for now.
-            if (f.startswith('newcore\\') or f.startswith('build\\')) and \
-            not f.startswith('newcore\\Symbian\\') and \
-            not f.startswith('newcore\\Doc\\s60'):
-                print "Ignoring", f
+            if (
+                (f.startswith("newcore\\") or f.startswith("build\\"))
+                and not f.startswith("newcore\\Symbian\\")
+                and not f.startswith("newcore\\Doc\\s60")
+            ):
+                print(f"Ignoring {f}")
                 continue
-            print "Processing template", f
+            print(f"Processing template {f}")
             template_engine.process_file(f, BUILDCONFIG)
 
-    for x in get_project_details('path'):
-        run_in(x, 'bldmake clean')
-        run_in(x, 'bldmake bldfiles')
+    for x in get_project_details("path"):
+        run_in(x, "bldmake clean")
+        run_in(x, "bldmake bldfiles")
 
 
 def cmd_generate_ensymble(params):
-    print "Building for ensymble started"
+    print("Building for ensymble started")
     buildconfig_load()
-    mod_depcfg_dir = 'newcore\\Symbian\\src\\'
-    ensymble_dir = 'tools\\py2sis\\ensymble\\'
-    stub_dirs = ['tools\\py2sis\\python_console\\group',
-                 'ext\\amaretto\\python_ui\\group']
+    mod_depcfg_dir = "newcore\\Symbian\\src\\"
+    ensymble_dir = "tools\\py2sis\\ensymble\\"
+    stub_dirs = [
+        "tools\\py2sis\\python_console\\group",
+        "ext\\amaretto\\python_ui\\group",
+    ]
 
     # It is a prerequisite for ensymble to have python built for armv5
     if not os.path.exists("\\epoc32\\release\\armv5\\urel\\python25.dll"):
-        raise RuntimeError('Python not built for ARMV5')
+        raise RuntimeError("Python not built for ARMV5")
     for stub_dir in stub_dirs:
-        run_in(stub_dir, 'abld -keepgoing reallyclean armv5', ignore_errors=1)
-        run_in(stub_dir, 'bldmake clean')
-        run_in(stub_dir, 'bldmake bldfiles')
-        run_in(stub_dir, 'abld build \
-                     %(EMU_PLATFORM)s %(EMU_BUILD)s ' % BUILDCONFIG)
-        run_in(stub_dir, 'abld build \
-                     %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s ' % BUILDCONFIG)
-    run_in(ensymble_dir, 'python genensymble.py')
-    os.chdir('newcore\\Symbian\\src')
-    BUILDCONFIG['MOD_REPO'] = True
-    execfile('module_config_parser.py', BUILDCONFIG)
+        run_in(stub_dir, "abld -keepgoing reallyclean armv5", ignore_errors=1)
+        run_in(stub_dir, "bldmake clean")
+        run_in(stub_dir, "bldmake bldfiles")
+        run_in(
+            stub_dir,
+            "abld build \
+                     %(EMU_PLATFORM)s %(EMU_BUILD)s "
+            % BUILDCONFIG,
+        )
+        run_in(
+            stub_dir,
+            "abld build \
+                     %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s "
+            % BUILDCONFIG,
+        )
+    run_in(ensymble_dir, "python genensymble.py")
+    os.chdir("newcore\\Symbian\\src")
+    BUILDCONFIG["MOD_REPO"] = True
+    execfile("module_config_parser.py", BUILDCONFIG)
     os.chdir(topdir)
     py_files = []
     os.chdir(mod_depcfg_dir)
-    if os.path.exists('module_dependency.cfg'):
-        shutil.move('module_dependency.cfg',
-            os.path.join(topdir, ensymble_dir,
-            'module-repo', 'standard-modules'))
+    if os.path.exists("module_dependency.cfg"):
+        shutil.move(
+            "module_dependency.cfg",
+            os.path.join(topdir, ensymble_dir, "module-repo", "standard-modules"),
+        )
     os.chdir(topdir)
-    BUILDCONFIG['MOD_REPO'] = False
+    BUILDCONFIG["MOD_REPO"] = False
 
 
 def cmd_build(params):
     global build_emulator
     global build_devices
     parser = OptionParser()
-    parser.add_option("--emu", action="store_true",
-            dest="build_emulator", default=False,
-            help="Build for Emulator")
-    parser.add_option("--device", action="store_true",
-            dest="build_devices", default=False,
-            help="Build for device")
+    parser.add_option(
+        "--emu",
+        action="store_true",
+        dest="build_emulator",
+        default=False,
+        help="Build for Emulator",
+    )
+    parser.add_option(
+        "--device",
+        action="store_true",
+        dest="build_devices",
+        default=False,
+        help="Build for device",
+    )
     (options, args) = parser.parse_args()
     build_emulator = options.build_emulator
     build_devices = options.build_devices
@@ -494,21 +581,22 @@ def cmd_build(params):
 
 def build_module(params, build):
     if build == "emu":
-        platform_type = '%(EMU_PLATFORM)s' % BUILDCONFIG
-        build_type = '%(EMU_BUILD)s' % BUILDCONFIG
+        platform_type = "%(EMU_PLATFORM)s" % BUILDCONFIG
+        build_type = "%(EMU_BUILD)s" % BUILDCONFIG
     elif build == "device":
-        platform_type = '%(DEVICE_PLATFORM)s' % BUILDCONFIG
-        build_type = '%(DEVICE_BUILD)s' % BUILDCONFIG
+        platform_type = "%(DEVICE_PLATFORM)s" % BUILDCONFIG
+        build_type = "%(DEVICE_BUILD)s" % BUILDCONFIG
 
     if os.path.exists(params[0]):
         module_dir = params[0]
     else:
-        module_dir = 'ext\\%s\\group' % params[0]
-    run_in(module_dir, 'abld -keepgoing reallyclean %s' % platform_type,
-           ignore_errors=1)
-    run_in(module_dir, 'bldmake clean')
-    run_in(module_dir, 'bldmake bldfiles')
-    run_in(module_dir, 'abld build %s %s' %(platform_type, build_type))
+        module_dir = "ext\\%s\\group" % params[0]
+    run_in(
+        module_dir, "abld -keepgoing reallyclean %s" % platform_type, ignore_errors=1
+    )
+    run_in(module_dir, "bldmake clean")
+    run_in(module_dir, "bldmake bldfiles")
+    run_in(module_dir, "abld build %s %s" % (platform_type, build_type))
 
 
 def build_emu(params):
@@ -516,11 +604,10 @@ def build_emu(params):
     if params:
         build_module(params, "emu")
     else:
-        deltree_if_exists('\\epoc32\\winscw\\c\\data\\python\\test')
-        os.makedirs('\\epoc32\\winscw\\c\\data\\python\\test')
-        for x in get_project_details('path'):
-            run_in(x, 'abld build %(EMU_PLATFORM)s %(EMU_BUILD)s '
-                   % BUILDCONFIG)
+        deltree_if_exists("\\epoc32\\winscw\\c\\data\\python\\test")
+        os.makedirs("\\epoc32\\winscw\\c\\data\\python\\test")
+        for x in get_project_details("path"):
+            run_in(x, "abld build %(EMU_PLATFORM)s %(EMU_BUILD)s " % BUILDCONFIG)
 
 
 def build_device(params):
@@ -528,103 +615,105 @@ def build_device(params):
     if params:
         build_module(params, "device")
     else:
-        for x in get_project_details('path'):
-            run_in(x, 'abld build %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s'
-                   % BUILDCONFIG)
+        for x in get_project_details("path"):
+            run_in(x, "abld build %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s" % BUILDCONFIG)
 
 
 def cmd_test_device_local(params):
-    sys.path.append(os.path.abspath(os.path.join(topdir, '..\\test')))
+    sys.path.append(os.path.abspath(os.path.join(topdir, "..\\test")))
     import test_device
+
     test_device.test_device_local()
 
 
 def cmd_test_device_remote(params):
-    sys.path.append(os.path.abspath(os.path.join(topdir, '..\\test')))
+    sys.path.append(os.path.abspath(os.path.join(topdir, "..\\test")))
     import test_device
+
     buildconfig_load()
     test_device.test_device_remote()
 
 
 def cmd_coverage(params):
     buildconfig_load()
-    BUILDCONFIG['CTC_COVERAGE'] = True
+    BUILDCONFIG["CTC_COVERAGE"] = True
     buildconfig_save()
-    print " \n---- Code coverage module called in setup.py ---- \n "
-    release_dir = os.path.abspath('..\\')
+    print(" \n---- Code coverage module called in setup.py ---- \n ")
+    release_dir = os.path.abspath("..\\")
     run_cmd("SET CTC_LOCK_MAX_WAIT=0")
     parser = OptionParser()
-    parser.add_option("--work-area", dest = "work_area", default = 'Build',
-                        help = "Path for coverage results [default: %default]")
+    parser.add_option(
+        "--work-area",
+        dest="work_area",
+        default="Build",
+        help="Path for coverage results [default: %default]",
+    )
     (options, args) = parser.parse_args()
     s = os.path.splitdrive(options.work_area)[1]
-    if (s != '' and s[:1] in '/\\'):
+    if s != "" and s[:1] in "/\\":
         testres_dir = options.work_area
     else:
-        testres_dir = release_dir + '\\src\\%s' % options.work_area
+        testres_dir = release_dir + "\\src\\%s" % options.work_area
     # As coverage is test related content it will be moved to test folder
     # under the work_area directory
-    testres_dir += '\\test'
+    testres_dir += "\\test"
     config = {}
 
-
     # Read SDK and COVERAGE_DIRS from the cfg file in tools folder
-    ctc_file = open(r'.\tools\ctc.cfg', 'r')
+    ctc_file = open(r".\tools\ctc.cfg", "r")
     for line in ctc_file:
-        line = line.rstrip('\n').strip()
-        if line and line[0] != '#':
-            temp_list = line.split('=')
+        line = line.rstrip("\n").strip()
+        if line and line[0] != "#":
+            temp_list = line.split("=")
             config[temp_list[0]] = temp_list[1:]
     ctc_file.close()
-    run_cmd('python setup.py configure -s ' + str(config['SDK'][0]))
-    run_cmd('python setup.py build --emu')
-    x = str(config['COVERAGE_DIRS'][0]).split('|')
+    run_cmd("python setup.py configure -s " + str(config["SDK"][0]))
+    run_cmd("python setup.py build --emu")
+    x = str(config["COVERAGE_DIRS"][0]).split("|")
 
     # Instrument the files using the ctcwrap command
     for group_dir in x:
-        os.chdir(topdir + '\\' + group_dir)
-        run_cmd('abld reallyclean')
-        run_cmd('bldmake clean')
-        run_cmd('bldmake bldfiles')
-        run_cmd('ctcwrap -i m -v abld build winscw udeb', exception_on_error=0)
+        os.chdir(topdir + "\\" + group_dir)
+        run_cmd("abld reallyclean")
+        run_cmd("bldmake clean")
+        run_cmd("bldmake bldfiles")
+        run_cmd("ctcwrap -i m -v abld build winscw udeb", exception_on_error=0)
 
     # Verify instrumentation did not fail by looking at the log
     os.chdir(testres_dir)
     file_list = os.listdir(os.getcwd())
     for x in file_list:
-        if x.startswith('pys60_build_log') and x.endswith('.log'):
+        if x.startswith("pys60_build_log") and x.endswith(".log"):
             log_file = x
-    compiled_reg = re.compile('CTC\+\+ Error')
+    compiled_reg = re.compile("CTC\+\+ Error")
     if compiled_reg.search(file(log_file).read()):
-        print "Instrumentation failed"
+        print("Instrumentation failed")
     else:
-        os.chdir(release_dir + '\\src')
+        os.chdir(release_dir + "\\src")
         # Run testapp in textshell mode
         run_testapp()
         # Collect log, covert to html and move to build directory
-        os.chdir(release_dir + '\\src\\newcore\\Symbian\\group')
-        run_cmd('ctcpost MON.sym MON.dat -p profile.txt', exception_on_error=0)
-        run_cmd('ctc2html -i profile.txt', exception_on_error=0)
-        if os.path.exists('CTCHTML'):
-            shutil.copytree('CTCHTML', testres_dir + '\\code_coverage')
+        os.chdir(release_dir + "\\src\\newcore\\Symbian\\group")
+        run_cmd("ctcpost MON.sym MON.dat -p profile.txt", exception_on_error=0)
+        run_cmd("ctc2html -i profile.txt", exception_on_error=0)
+        if os.path.exists("CTCHTML"):
+            shutil.copytree("CTCHTML", testres_dir + "\\code_coverage")
 
 
 def do_build(in_dir, device=False):
     cwd = os.getcwd()
     os.chdir(in_dir)
-    build_cmd = 'abld build winscw udeb'
+    build_cmd = "abld build winscw udeb"
     if device:
-        build_cmd = 'abld build %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s' \
-                    % BUILDCONFIG
-    run_cmd('bldmake clean')
-    run_cmd('bldmake bldfiles')
-    run_cmd('abld reallyclean')
+        build_cmd = "abld build %(DEVICE_PLATFORM)s %(DEVICE_BUILD)s" % BUILDCONFIG
+    run_cmd("bldmake clean")
+    run_cmd("bldmake bldfiles")
+    run_cmd("abld reallyclean")
     run_cmd(build_cmd)
     os.chdir(cwd)
 
 
 class KillTestappIfFrozen(Thread):
-
     def __init__(self, timeout):
         Thread.__init__(self)
         self.timeout = timeout
@@ -634,23 +723,22 @@ class KillTestappIfFrozen(Thread):
         while True:
             time.sleep(60)
             if os.system("pslist > temp.txt"):
-                print "Add sysinternalsuite's install " + \
-                "path to PATH env variable"
+                print("Add sysinternalsuite's install path to PATH env variable")
                 break
             if open("temp.txt").read().find("testapp") == -1:
                 break
             self.counter += 1
             if self.counter > self.timeout:
-                run_cmd('pskill testapp.exe')
+                run_cmd("pskill testapp.exe")
                 break
 
 
 def run_testapp():
-    if not os.path.exists('\\epoc32\\data\\epoc.ini.bak'):
-        os.rename('\\epoc32\\data\\epoc.ini', '\\epoc32\\Data\\epoc.ini.bak')
-    f = open('\\epoc32\\data\\epoc.ini', 'wa')
-    f1 = open('\\epoc32\\data\\epoc.ini.bak', 'r')
-    f.write('textshell\n')
+    if not os.path.exists("\\epoc32\\data\\epoc.ini.bak"):
+        os.rename("\\epoc32\\data\\epoc.ini", "\\epoc32\\Data\\epoc.ini.bak")
+    f = open("\\epoc32\\data\\epoc.ini", "wa")
+    f1 = open("\\epoc32\\data\\epoc.ini.bak", "r")
+    f.write("textshell\n")
     for line in f1:
         f.write(line)
     f.close()
@@ -659,15 +747,18 @@ def run_testapp():
         # Kill testapp(emulator) if it doesn't close in 40 minutes
         KillTestappIfFrozen(40).start()
         result = run_shell_command(
-                '\\epoc32\\release\\winscw\\udeb\\testapp.exe',
-                mixed_stderr = 1, verbose = 1, exception_on_error = 0)
-        if result['return_code'] != 0:
-            print "*** testapp crash - code %d ***" % result['return_code']
+            "\\epoc32\\release\\winscw\\udeb\\testapp.exe",
+            mixed_stderr=1,
+            verbose=1,
+            exception_on_error=0,
+        )
+        if result["return_code"] != 0:
+            print(f"*** testapp crash - code  {result['return_code']}***")
         else:
-            print 'Finished executing all test cases'
+            print("Finished executing all test cases")
     finally:
-        delete_file('\\epoc32\\data\\epoc.ini')
-        os.rename('\\epoc32\\data\\epoc.ini.bak', '\\epoc32\\data\\epoc.ini')
+        delete_file("\\epoc32\\data\\epoc.ini")
+        os.rename("\\epoc32\\data\\epoc.ini.bak", "\\epoc32\\data\\epoc.ini")
 
 
 def cmd_test(params):
@@ -676,147 +767,176 @@ def cmd_test(params):
         cmd_help(())
         sys.exit(2)
     parser = OptionParser()
-    parser.add_option("--testset-size", dest="test_size",
-            action="store_true", default=False,
-            help="Run all the tests under c:\data\python\test in sets of N")
-    parser.add_option("--sdk-version", dest="sdk_version", default="_x86",
-            help="Specify the sdk version")
-    parser.add_option("--use-testsets-cfg", dest="testsets_cfg",
-            action="store_true", default=False,
-            help="Specify to run the tests listed in testcase.cfg")
+    parser.add_option(
+        "--testset-size",
+        dest="test_size",
+        action="store_true",
+        default=False,
+        help="Run all the tests under c:\data\python\test in sets of N",
+    )
+    parser.add_option(
+        "--sdk-version",
+        dest="sdk_version",
+        default="_x86",
+        help="Specify the sdk version",
+    )
+    parser.add_option(
+        "--use-testsets-cfg",
+        dest="testsets_cfg",
+        action="store_true",
+        default=False,
+        help="Specify to run the tests listed in testcase.cfg",
+    )
     (options, args) = parser.parse_args()
 
     sdk_version = options.sdk_version
     if not options.testsets_cfg:
-        f = open('options.txt', 'w')
+        f = open("options.txt", "w")
         f.write("\n".join(sys.argv[2:]))
         f.close()
-    shutil.move('options.txt', '\\epoc32\\winscw\\c\\data\\python\\test')
+    shutil.move("options.txt", "\\epoc32\\winscw\\c\\data\\python\\test")
     run_testapp()
     if not os.path.exists(testdata_dir):
         os.makedirs(testdata_dir)
-    regrtest_log = '\\epoc32\\winscw\\c\\data\\python\\test\\regrtest_emu.log'
-    regrlog_version = 'regrtest_emulator%s.log' % sdk_version
+    regrtest_log = "\\epoc32\\winscw\\c\\data\\python\\test\\regrtest_emu.log"
+    regrlog_version = "regrtest_emulator%s.log" % sdk_version
     if os.path.exists(regrtest_log):
-        shutil.move(regrtest_log,
-               os.path.join(topdir, testdata_dir, regrlog_version))
-        if sdk_version == '_3_2' or sdk_version == "_x86":
-            run_cmd('python tools\\regrtest_log_to_cruisecontrol.py ' +
-                regrlog_version)
-        results = \
-                open(testdata_dir + '\\' + regrlog_version, 'r').read()
-        print "printing regrtest.py output"
-        print results
-        print "Finished printing"
+        shutil.move(regrtest_log, os.path.join(topdir, testdata_dir, regrlog_version))
+        if sdk_version == "_3_2" or sdk_version == "_x86":
+            run_cmd("python tools\\regrtest_log_to_cruisecontrol.py " + regrlog_version)
+        results = open(testdata_dir + "\\" + regrlog_version, "r").read()
+        print("printing regrtest.py output")
+        print("\n".join(results))
+        print("Finished printing")
     else:
-        print "regrtest log was not created by testapp"
+        print("regrtest log was not created by testapp")
 
 
 def install_sdk_files_to(directory):
-    print "Installing SDK files to directory %s" % directory
+    print(f"Installing SDK files to directory {directory}")
     # Copy files to sdk_files directory
-    execfile('tools/sdk_files.py', BUILDCONFIG)
+    execfile("tools/sdk_files.py", BUILDCONFIG)
     missing = []
     n_copied = 0
-    for fromfile, tofile in BUILDCONFIG['SDK_FILES']:
+    for fromfile, tofile in BUILDCONFIG["SDK_FILES"]:
         if not os.path.exists(fromfile):
             missing.append(fromfile)
             continue
         abs_tofile = os.path.normpath(os.path.join(directory, tofile))
         copy_file(fromfile, abs_tofile)
         n_copied += 1
-    print "Installed SDK files to directory %s" % directory
+    print(f"Installed SDK files to directory {directory}")
     if missing:
         if not allow_missing:
-            raise BuildFailedException('Files not found:\n  ' + \
-                                       '\n  '.join(missing))
+            raise BuildFailedException("Files not found:\n  " + "\n  ".join(missing))
         else:
-            print "** Warning: Following %d files were not found:\n" \
-            % len(missing) + "\n  ".join(missing)
+            print(
+                f"** Warning: Following {len(missing)} files were not found:\n"
+                + "\n  ".join(missing)
+            )
     return missing
 
 
 def cmd_bdist_sdk(params):
     parser = OptionParser()
 
-    parser.add_option("--create-temp-sdk-zip", action='store_true',
-            dest="create_temp_sdk_zip", default=False,
-            help="Include all armv5 built binaries in the sdk zip" +
-                 " [default: %default]")
+    parser.add_option(
+        "--create-temp-sdk-zip",
+        action="store_true",
+        dest="create_temp_sdk_zip",
+        default=False,
+        help="Include all armv5 built binaries in the sdk zip" + " [default: %default]",
+    )
 
     (options, args) = parser.parse_args()
 
     buildconfig_load()
 
     if options.create_temp_sdk_zip:
-        BUILDCONFIG['INCLUDE_ARMV5_PYDS'] = True
+        BUILDCONFIG["INCLUDE_ARMV5_PYDS"] = True
 
-    sdk_files_dir = os.path.normpath(topdir + '/install/sdk_files')
+    sdk_files_dir = os.path.normpath(topdir + "/install/sdk_files")
     deltree_if_exists(sdk_files_dir)
-    sdk_full_name = 'Python_SDK_%(SDK_MARKETING_VERSION_SHORT)s'% BUILDCONFIG
+    sdk_full_name = "Python_SDK_%(SDK_MARKETING_VERSION_SHORT)s" % BUILDCONFIG
     install_sdk_files_to(sdk_files_dir)
     # Generate uninstaller
-    f = open(sdk_files_dir + '/uninstall_%s.cmd' % sdk_full_name, 'wt')
-    print >> f, '''@echo Uninstalling %s''' % sdk_full_name
-    for fromfile, tofile in BUILDCONFIG['SDK_FILES']:
-        print >> f, 'del ' + os.path.normpath(tofile)
-    f.close()
+    with open(sdk_files_dir + "/uninstall_%s.cmd" % sdk_full_name, "wt") as file:
+        file.write(f"""@echo Uninstalling {sdk_full_name}""")
+        for fromfile, tofile in BUILDCONFIG["SDK_FILES"]:
+            file.write("del " + os.path.normpath(tofile))
 
-    zipname = topdir + '/%s.zip' % sdk_full_name
+    zipname = topdir + f"/{sdk_full_name}.zip"
     create_archive_from_directory(zipname, sdk_files_dir)
 
 
 def cmd_bdist_sis(params):
     buildconfig_load()
     parser = OptionParser()
-    parser.add_option("--keydir", dest = "keydir", default = '..\\keys',
-            help = "specify key path [default: %default]")
-    parser.add_option("-k", "--key", dest = "key",
-            help = "specify key name, [default: None]" +
-            " - packages are left unsigned")
+    parser.add_option(
+        "--keydir",
+        dest="keydir",
+        default="..\\keys",
+        help="specify key path [default: %default]",
+    )
+    parser.add_option(
+        "-k",
+        "--key",
+        dest="key",
+        help="specify key name, [default: None]" + " - packages are left unsigned",
+    )
     (options, args) = parser.parse_args()
     if options.key:
-        BUILDCONFIG['SIGN_KEY'] = options.keydir + '\\' + \
-        '%s' % options.key + '.key'
-        BUILDCONFIG['SIGN_CERT'] = options.keydir + '\\' + \
-        '%s' % options.key + '.crt'
-        BUILDCONFIG['SIGN_PASS'] = ''
+        BUILDCONFIG["SIGN_KEY"] = options.keydir + "\\" + "%s" % options.key + ".key"
+        BUILDCONFIG["SIGN_CERT"] = options.keydir + "\\" + "%s" % options.key + ".crt"
+        BUILDCONFIG["SIGN_PASS"] = ""
         buildconfig_save()
-    s60version = BUILDCONFIG['S60_VERSION']
+    s60version = BUILDCONFIG["S60_VERSION"]
     # packaging for S60 3.0 and above
     y = 0
-    group_dir = get_project_details('path')
-    names = get_project_details('name')
+    group_dir = get_project_details("path")
+    names = get_project_details("name")
     for x in group_dir:
-        if options.key == 'pythonteam' and names[y] == 'python25':
+        if options.key == "pythonteam" and names[y] == "python25":
             group_dir.remove(x)
             names.remove(names[y])
 
     for x in group_dir:
-        run_in(x, 'makesis ' + names[y] + '.pkg')
+        run_in(x, "makesis " + names[y] + ".pkg")
         y += 1
     # If certificate and key files and passphrase has been provided,
     # sign the generated SIS packages.
     y = 0
-    if not ('SIGN_CERT' in BUILDCONFIG and
-            'SIGN_KEY' in BUILDCONFIG and
-            'SIGN_PASS' in BUILDCONFIG):
-        print"Warning! SIGN_CERT, SIGN_KEY or SIGN_PASS is not defined." + \
-        "SIS packages will not be signed"
+    if not (
+        "SIGN_CERT" in BUILDCONFIG
+        and "SIGN_KEY" in BUILDCONFIG
+        and "SIGN_PASS" in BUILDCONFIG
+    ):
+        print(
+            "Warning! SIGN_CERT, SIGN_KEY or SIGN_PASS is not defined."
+            + "SIS packages will not be signed"
+        )
     else:
-        cert = os.path.join(topdir, BUILDCONFIG['SIGN_CERT'])
-        key = os.path.join(topdir, BUILDCONFIG['SIGN_KEY'])
-        passphrase = BUILDCONFIG['SIGN_PASS']
-        print "Signing packages with certificate %s and key %s" % (cert, key)
+        cert = os.path.join(topdir, BUILDCONFIG["SIGN_CERT"])
+        key = os.path.join(topdir, BUILDCONFIG["SIGN_KEY"])
+        passphrase = BUILDCONFIG["SIGN_PASS"]
+        print(f"Signing packages with certificate {cert} and key {key}")
         for x in group_dir:
-            run_in(x, 'signsis ' + names[y] +
-            '.sis ' + names[y] + '.sis %s %s %s' % (cert, key, passphrase))
+            run_in(
+                x,
+                "signsis "
+                + names[y]
+                + ".sis "
+                + names[y]
+                + ".sis %s %s %s" % (cert, key, passphrase),
+            )
             y += 1
     y = 0
     for x in group_dir:
-        os.chdir(topdir + '\\' + x)
-        rename_file(names[y] + '.sis', names[y] +
-        '_%(SDK_MARKETING_VERSION_SHORT)s.sis' % BUILDCONFIG)
+        os.chdir(topdir + "\\" + x)
+        rename_file(
+            names[y] + ".sis",
+            names[y] + "_%(SDK_MARKETING_VERSION_SHORT)s.sis" % BUILDCONFIG,
+        )
         y += 1
 
 
@@ -831,31 +951,30 @@ def cmd_obb(params):
 def cmd_clean(params):
     buildconfig_clean()
     global BUILDCONFIG
-    build_dirs = ['', '..\\internal-src']
+    build_dirs = ["", "..\\internal-src"]
     BUILDCONFIG = {}
     BUILDCONFIG.update(buildconfig_defaults)
     buildconfig_save()
-    for x in get_project_details('path'):
-        run_in(x, 'abld -keepgoing reallyclean winscw', ignore_errors=1)
-        run_in(x, 'abld -keepgoing reallyclean armv5', ignore_errors=1)
-        run_in(x, 'bldmake clean', ignore_errors=1)
+    for x in get_project_details("path"):
+        run_in(x, "abld -keepgoing reallyclean winscw", ignore_errors=1)
+        run_in(x, "abld -keepgoing reallyclean armv5", ignore_errors=1)
+        run_in(x, "bldmake clean", ignore_errors=1)
     for f in template_engine.templatefiles_in_tree(topdir):
         outfile = template_engine.outfilename_from_infilename(f)
         if os.path.exists(outfile):
             delete_file(outfile)
     # Delete the files created by module_config_parser
     prev_dir = os.getcwd()
-    os.chdir('newcore\\Symbian\\src')
+    os.chdir("newcore\\Symbian\\src")
     module_config_parser.clean()
     os.chdir(prev_dir)
     for directory in build_dirs:
-        for files in fileutil.all_files(directory, '*.pyc'):
+        for files in fileutil.all_files(directory, "*.pyc"):
             delete_file(files)
 
-    deltree_if_exists('install')
+    deltree_if_exists("install")
     srcdir_base = topdir[2:]
-    deltree_if_exists('\\epoc32\\build' + srcdir_base)
-
+    deltree_if_exists("\\epoc32\\build" + srcdir_base)
 
     buildconfig_clean()
 
@@ -863,46 +982,61 @@ def cmd_clean(params):
 def cmd_setcaps(params):
     srcdir_base = topdir[2:]
     parser = OptionParser()
-    parser.add_option("-c", "--caps", dest = "dll_caps",
-        default = 'LocalServices NetworkServices ReadUserData ' +
-                  'WriteUserData UserEnvironment',
-        help = "Specify DLL capability within quotes [default: %default]")
-    parser.add_option("--exe-caps", dest = "exe_caps",
-           help = "Specify EXEs capability within quotes. If nothing " +
-           "is specified this will be same as DLL capabilities")
+    parser.add_option(
+        "-c",
+        "--caps",
+        dest="dll_caps",
+        default="LocalServices NetworkServices ReadUserData "
+        + "WriteUserData UserEnvironment",
+        help="Specify DLL capability within quotes [default: %default]",
+    )
+    parser.add_option(
+        "--exe-caps",
+        dest="exe_caps",
+        help="Specify EXEs capability within quotes. If nothing "
+        + "is specified this will be same as DLL capabilities",
+    )
     (options, args) = parser.parse_args()
     if not options.dll_caps:
-        print '''*** Error: Incorrect arguments
+        print(
+            """*** Error: Incorrect arguments
         Usage: setcaps [SETTING=value ...]
-        prerequisite: binaries for the device must be built'''
+        prerequisite: binaries for the device must be built"""
+        )
         return
     else:
         buildconfig_load()
-    BUILDCONFIG['DLL_CAPABILITIES'] = options.dll_caps
+    BUILDCONFIG["DLL_CAPABILITIES"] = options.dll_caps
     if not options.exe_caps:
-        BUILDCONFIG['EXE_CAPABILITIES'] = options.dll_caps
+        BUILDCONFIG["EXE_CAPABILITIES"] = options.dll_caps
     else:
-        BUILDCONFIG['EXE_CAPABILITIES'] = options.exe_caps
+        BUILDCONFIG["EXE_CAPABILITIES"] = options.exe_caps
     buildconfig_save()
-    input_dir = '\\epoc32\\build' + srcdir_base
-    input_platform_build = '%(DEVICE_PLATFORM)s.%(DEVICE_BUILD)s' % BUILDCONFIG
-    output_dir = '\\Epoc32\\release\\%(DEVICE_PLATFORM)s\\%(DEVICE_BUILD)s\\' \
-                 % BUILDCONFIG
+    input_dir = "\\epoc32\\build" + srcdir_base
+    input_platform_build = "%(DEVICE_PLATFORM)s.%(DEVICE_BUILD)s" % BUILDCONFIG
+    output_dir = (
+        "\\Epoc32\\release\\%(DEVICE_PLATFORM)s\\%(DEVICE_BUILD)s\\" % BUILDCONFIG
+    )
 
     def set_capas_of_matching_files(regex, capas):
         input_files = files_matching_regex(input_dir, regex)
         if not input_files:
-            print '*** Error: binaries for the device must be built'
+            print("*** Error: binaries for the device must be built")
             return
         for x in input_files:
-            setcapas(capas = capas,
-                     compression_type = BUILDCONFIG['COMPRESSION_TYPE'],
-                     output = os.path.join(output_dir, os.path.basename(x)),
-                     verbose = 1)
-    set_capas_of_matching_files('.*' + input_platform_build + '.*(pyd|dll)$',
-                                BUILDCONFIG['DLL_CAPABILITIES'])
-    set_capas_of_matching_files('.*' + input_platform_build + '.*exe$',
-                                BUILDCONFIG['EXE_CAPABILITIES'])
+            setcapas(
+                capas=capas,
+                compression_type=BUILDCONFIG["COMPRESSION_TYPE"],
+                output=os.path.join(output_dir, os.path.basename(x)),
+                verbose=1,
+            )
+
+    set_capas_of_matching_files(
+        ".*" + input_platform_build + ".*(pyd|dll)$", BUILDCONFIG["DLL_CAPABILITIES"]
+    )
+    set_capas_of_matching_files(
+        ".*" + input_platform_build + ".*exe$", BUILDCONFIG["EXE_CAPABILITIES"]
+    )
 
 
 def cmd_generate_docs(params):
@@ -911,19 +1045,23 @@ def cmd_generate_docs(params):
     vmware_share_dir = "c:\\python_share"
     if os.path.exists(vmware_share_dir + "\\newcore"):
         shutil.rmtree(vmware_share_dir + "\\newcore")
-    newcore_dir = os.path.abspath(os.path.join(topdir, 'newcore'))
-    run_cmd('python setup.py configure --do-not-compile-pyfiles')
+    newcore_dir = os.path.abspath(os.path.join(topdir, "newcore"))
+    run_cmd("python setup.py configure --do-not-compile-pyfiles")
     shutil.copytree(newcore_dir, vmware_share_dir + "\\newcore")
 
-    print "Generating Python docs"
+    print("Generating Python docs")
     html_dir = vmware_share_dir + "\\html"
     log_file = vmware_share_dir + "\\build.log"
     newcore_src = vmware_share_dir + "\\newcore"
 
     parser = OptionParser()
-    parser.add_option("--work-area", dest = "work_area", default = 'Build',
-                help = "Path where generated docs will be placed" +
-                       "(relative to the src directory) [default: %default]")
+    parser.add_option(
+        "--work-area",
+        dest="work_area",
+        default="Build",
+        help="Path where generated docs will be placed"
+        + "(relative to the src directory) [default: %default]",
+    )
     (options, args) = parser.parse_args()
     work_area = os.path.join(topdir, options.work_area)
 
@@ -931,23 +1069,24 @@ def cmd_generate_docs(params):
     if os.path.exists(html_dir):
         shutil.rmtree(html_dir)
 
-    print "Invoking vmware image to build Python docs"
+    print("Invoking vmware image to build Python docs")
     os.system("call C:\\Ubuntu-8.10\\Ubuntu.vmx")
 
     if os.path.exists(html_dir):
         shutil.copytree(html_dir, work_area + "\\doc")
         shutil.rmtree(html_dir)
     else:
-        print "Python doc not generated"
+        print("Python doc not generated")
 
     if os.path.exists(log_file):
         log_text = file(log_file).read()
-        print log_text
+        print("\n".join(log_text))
         os.remove(log_file)
 
 
 def cmd_help(params):
-    print '''Usage: %s <command> [<options>]
+    print(
+        f"""Usage: {sys.argv[0]} <command> [<options>]
 Commands:
     configure -s <SDK> [options]
         Configure the source for the given SDK. This must be done before build.
@@ -1040,28 +1179,29 @@ Examples:
         Configure, build and package for S60 SDK 2.8.
     setup.py test -v
         Run tests in verbose mode with output to stdout
-''' % sys.argv[0]
+"""
+    )
 
 
-if __name__ == '__main__':
-    if len(sys.argv)<2:
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
         cmd_help(())
         sys.exit(2)
 
-    #resolve the projects needed for release and integration builds
+    # resolve the projects needed for release and integration builds
     cmd = sys.argv[1]
-    funcname = 'cmd_' + cmd
-    if hasattr(sys.modules['__main__'], funcname):
+    funcname = "cmd_" + cmd
+    if hasattr(sys.modules["__main__"], funcname):
         try:
-            getattr(sys.modules['__main__'], funcname)(sys.argv[2:])
-    #it is coming only for setup.py configure --help
+            getattr(sys.modules["__main__"], funcname)(sys.argv[2:])
+        # it is coming only for setup.py configure --help
         except SystemExit:
             raise
         except:
             traceback.print_exc()
-            print "*** BUILD FAILED ***"
+            print("*** BUILD FAILED ***")
             sys.exit(1)
     else:
-        print "Unknown command %s" % cmd
+        print("Unknown command {cmd}")
         cmd_help(())
         sys.exit(2)
