@@ -28,9 +28,9 @@ from optparse import OptionParser
 from tools import fileutil
 from tools import template_engine
 from tools.shellutil import *
-from newcore.Symbian.src import module_config_parser
-from newcore.Lib.posixfile import _posixfile_
-from newcore.Lib.idlelib.pyshell import execfile
+from Symbian.src import module_config_parser
+from posixpath import _posixfile_
+from idlelib.pyshell import execfile
 
 file = _posixfile_.file
 

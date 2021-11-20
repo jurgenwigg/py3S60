@@ -13,10 +13,8 @@
 # limitations under the License.
 
 import sys
-import stat
 import re
 import shutil
-import thread
 import os.path
 from os.path import normpath
 from subprocess import *
@@ -41,11 +39,10 @@ def log(str):
     """Prints the log in PyS60 format.
     This must be used in place of "print" to get uniformity in logs
     """
-    print "PyS60: " + str
+    print("PyS360: " + str)
 
 
-def run_shell_command(cmd, stdin='', mixed_stderr=0, verbose=0,
-                      exception_on_error=1):
+def run_shell_command(cmd, stdin="", mixed_stderr=0, verbose=0, exception_on_error=1):
     """Internal method to execute shell commands"""
     stdout_buf = []
     if mixed_stderr:
@@ -53,12 +50,8 @@ def run_shell_command(cmd, stdin='', mixed_stderr=0, verbose=0,
     else:
         stderr_buf = []
     if verbose:
-        print '- ', cmd
-    p = Popen(cmd,
-              stdin=PIPE,
-              stdout=PIPE,
-              stderr=PIPE,
-              shell=True)
+        print("- ", cmd)
+    p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
     p.stdin.write(stdin)
     p.stdin.close()
 
@@ -68,8 +61,9 @@ def run_shell_command(cmd, stdin='', mixed_stderr=0, verbose=0,
             if len(line) == 0:
                 break
             if verbose:
-                print " ** " + line
+                print(" ** " + line)
             stderr_buf.append(line)
+
     stderr_thread = Thread(target=handle_stderr)
     stderr_thread.start()
     while 1:
@@ -77,29 +71,31 @@ def run_shell_command(cmd, stdin='', mixed_stderr=0, verbose=0,
         if len(line) == 0:
             break
         if verbose:
-            print " -- " + line,
-        stdout_buf.append(line)
+            print(" -- " + line, stdout_buf.append(line))
     retcode = p.wait()
     stderr_thread.join()
     if retcode != 0 and exception_on_error:
-        raise CommandFailedException('Command "%s" failed with code "%s"'
-                                       % (cmd, retcode))
+        raise CommandFailedException(
+            'Command "%s" failed with code "%s"' % (cmd, retcode)
+        )
     if mixed_stderr:
-        return {'stdout': ''.join(stdout_buf),
-                'return_code': retcode}
+        return {"stdout": "".join(stdout_buf), "return_code": retcode}
     else:
-        return {'stdout': ''.join(stdout_buf),
-                'stderr': ''.join(stderr_buf),
-                'return_code': retcode}
+        return {
+            "stdout": "".join(stdout_buf),
+            "stderr": "".join(stderr_buf),
+            "return_code": retcode,
+        }
 
 
 def run_cmd(cmd, verbose=1, exception_on_error=1):
     """Method to execute shell commands.
     Set verbose to 0 to stop logging messages.
     """
-    log('Executing command :<%s>' % cmd)
-    run_shell_command(cmd, mixed_stderr=1, verbose=verbose,
-                      exception_on_error=exception_on_error)
+    log("Executing command :<%s>" % cmd)
+    run_shell_command(
+        cmd, mixed_stderr=1, verbose=verbose, exception_on_error=exception_on_error
+    )
 
 
 def rename_file(fromfile, tofile):
@@ -118,15 +114,17 @@ def copy_file(fromfile, tofile):
     fromfile = normpath(fromfile)
     tofile = normpath(tofile)
     if fromfile == tofile:
-        log("shellutil.py: No need to copy, source and target are the same:" +
-             "%s -> %s" % (fromfile, tofile))
+        log(
+            "shellutil.py: No need to copy, source and target are the same:"
+            + "%s -> %s" % (fromfile, tofile)
+        )
     else:
         log("shellutil.py: Copying: %s -> %s" % (fromfile, tofile))
         targetdir = os.path.dirname(os.path.abspath(tofile))
         if not os.path.exists(targetdir):
             os.makedirs(targetdir)
-        content = open(fromfile, 'rb').read()
-        open(tofile, 'wb').write(content)
+        content = open(fromfile, "rb").read()
+        open(tofile, "wb").write(content)
 
 
 def delete_file(filename):
@@ -158,52 +156,51 @@ def files_matching_regex(topdir, regex):
     return files
 
 
-def setcapas(output, capas, compression_type='', verbose=0):
+def setcapas(output, capas, compression_type="", verbose=0):
     """Method to apply new capability set & compression type on dlls or exes
     This is used as post linker
     """
-    compression_opt = ''
-    if compression_type != '':
-        compression_opt = '-compressionmethod ' + compression_type
-    run_cmd('elftran -capability "%s" %s %s' \
-                                           % (capas, compression_opt, output))
+    compression_opt = ""
+    if compression_type != "":
+        compression_opt = "-compressionmethod " + compression_type
+    run_cmd('elftran -capability "%s" %s %s' % (capas, compression_opt, output))
     if verbose:
-        run_cmd('elftran -dump s %s' % output, exception_on_error=0)
+        run_cmd("elftran -dump s %s" % output, exception_on_error=0)
 
 
-def create_archive_from_directory(archive_name, topdir, archive_dir='',
-                                  archive_type='zip'):
+def create_archive_from_directory(
+    archive_name, topdir, archive_dir="", archive_type="zip"
+):
     """Creates a compressed archive from the contents of the given directory.
-       The archive types supported are tar.gz and zip.
+    The archive types supported are tar.gz and zip.
     """
     archive_name = os.path.normpath(archive_name)
     topdir = os.path.normpath(topdir)
-    print "Creating archive %s from directory %s..." % (archive_name, topdir)
+    print("Creating archive %s from directory %s..." % (archive_name, topdir))
 
-    if archive_type == 'tar.gz':
-        archive = tarfile.open(archive_name, 'w:gz')
+    if archive_type == "tar.gz":
+        archive = tarfile.open(archive_name, "w:gz")
     else:
-        archive = zipfile.ZipFile(archive_name, 'w')
+        archive = zipfile.ZipFile(archive_name, "w")
     abs_topdir = os.path.abspath(topdir)
     for root, dirs, files in os.walk(topdir):
-        if '.svn' in dirs:
-            dirs.remove('.svn')
+        if ".svn" in dirs:
+            dirs.remove(".svn")
         abs_root = os.path.abspath(root)
         # Remove the common part from the directory name,
         # leaving just the relative part
-        relative_path = abs_root[len(abs_topdir) + 1:]
+        relative_path = abs_root[len(abs_topdir) + 1 :]
         for name in files:
             absolute_filename = os.path.join(abs_root, name)
             archive_filename = os.path.join(relative_path, name)
             archive_filename = os.path.join(archive_dir, archive_filename)
-            print "Adding %s as %s" % (absolute_filename, archive_filename)
-            if archive_type == 'tar.gz':
+            print("Adding %s as %s" % (absolute_filename, archive_filename))
+            if archive_type == "tar.gz":
                 archive.add(absolute_filename, archive_filename)
             else:
-                archive.write(absolute_filename, archive_filename,
-                                                          zipfile.ZIP_DEFLATED)
+                archive.write(absolute_filename, archive_filename, zipfile.ZIP_DEFLATED)
     archive.close()
-    print "Created: ", archive_name
+    print("Created: ", archive_name)
 
 
 class tee(object):
