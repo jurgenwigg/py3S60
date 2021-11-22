@@ -14,13 +14,15 @@
 
 import sys
 
+from newcore.Lib.textwrap import indent
+
 if sys.version_info < (3, 8):
     print("Python 3.8 or later required.")
     sys.exit(2)
 import os
 from threading import Thread
 import re
-import imp
+import importlib
 import compileall
 import traceback
 import time
@@ -29,6 +31,9 @@ from tools import fileutil
 from tools import template_engine
 from tools.shellutil import *
 from newcore.Symbian.src import module_config_parser
+from pprint import PrettyPrinter
+
+pp = PrettyPrinter(indent=4)
 
 topdir = os.getcwd()
 testdata_dir = ".\\build\\test"
@@ -39,7 +44,7 @@ sys.path.append(os.path.join(topdir, "newcore\\Symbian\\src"))
 internal_proj = False
 
 # Specify the magic number of the Python interpreter used in PyS60.
-pys60_magic_number = "\xb3\xf2\r\n"
+pys60_magic_number = b"U\r\r\n"
 
 projects = [
     {"name": "python25", "path": "newcore\\symbian\\group", "internal": False},
@@ -68,8 +73,8 @@ buildconfig_defaults = {
     # explicitly.
     "PYS60_VERSION_TAG": time.strftime("development_build_%Y%m%d_%H%M"),
     "PYS60_RELEASE_DATE": time.strftime("%d %b %Y"),
-    "PY_CORE_VERSION": "2.5.4",
-    "PY_ON_BUILD_SERVER": "2.5.1",
+    "PY_CORE_VERSION": "3.8.2",
+    "PY_ON_BUILD_SERVER": "3.8.2",
     "PYS60_VERSION_SERIAL": 0,
     "EMU_BUILD": "udeb",
     "DEVICE_PLATFORM": "armv5",
@@ -143,6 +148,15 @@ buildconfig_sdks = {
         "PYS60_UID_SCRIPTSHELL": "0x20022EEC",
         "SDK_NAME": "S60 5th Ed  w/ RVCT compiler",
         "SDK_MARKETING_VERSION_SHORT": "5thEd",
+        "S60_REQUIRED_PLATFORM_UID": "0x1028315F",
+    },
+    "55arm": {
+        "S60_VERSION": 55,
+        "DEVICE_PLATFORM": "arm",
+        "EMU_PLATFORM": "winscw",
+        "PYS60_UID_SCRIPTSHELL": "0x20022EEC",
+        "SDK_NAME": "S60^3 v5.5  w/ GCCE compiler",
+        "SDK_MARKETING_VERSION_SHORT": "BelleFP2",
         "S60_REQUIRED_PLATFORM_UID": "0x1028315F",
     },
 }
@@ -369,7 +383,15 @@ def cmd_configure(params):
 
     (options, args) = parser.parse_args()
 
-    if not options.do_not_compile_pyfiles and pys60_magic_number != imp.get_magic():
+    print("*" * 80)
+    print(f"options.do_compile= {options.do_not_compile_pyfiles}")
+    print(f"pys60_magic_number= {pys60_magic_number}")
+    print(f"importlib.util.MAGIC_NUMBER= {importlib.util.MAGIC_NUMBER}")
+    print("*" * 80)
+    if (
+        not options.do_not_compile_pyfiles
+        and pys60_magic_number != importlib.util.MAGIC_NUMBER
+    ):
         raise SystemError(
             "Not compiling the .py files: "
             + "Python version(%s) " % sys.version.split()[0]
@@ -379,6 +401,8 @@ def cmd_configure(params):
 
     if options.sdk not in buildconfig_sdks:
         print(f'Unsupported SDK configuration "{options.sdk}"')
+        # print("buildconfig_sdks:")
+        # pp.pprint(buildconfig_sdks)
         sys.exit(2)
 
     # Find out if coverage called configure. There are chances that the cfg
