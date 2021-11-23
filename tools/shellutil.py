@@ -52,7 +52,7 @@ def run_shell_command(cmd, stdin="", mixed_stderr=0, verbose=0, exception_on_err
     if verbose:
         print("- ", cmd)
     p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-    p.stdin.write(stdin)
+    p.stdin.write(stdin.encode("ascii"))
     p.stdin.close()
 
     def handle_stderr():
@@ -61,29 +61,34 @@ def run_shell_command(cmd, stdin="", mixed_stderr=0, verbose=0, exception_on_err
             if len(line) == 0:
                 break
             if verbose:
-                print(" ** " + line)
+                print(f" ** {line.decode('ascii')}")
             stderr_buf.append(line)
 
     stderr_thread = Thread(target=handle_stderr)
     stderr_thread.start()
+    pattern = "[^0-9a-zA-Z\s]+"
     while 1:
         line = p.stdout.readline()
         if len(line) == 0:
             break
         if verbose:
-            print(" -- " + line, stdout_buf.append(line))
+            print(f" -- " + repr(line))
+            stdout_buf.append(line)
     retcode = p.wait()
     stderr_thread.join()
     if retcode != 0 and exception_on_error:
         raise CommandFailedException(
             'Command "%s" failed with code "%s"' % (cmd, retcode)
         )
+    stdout_str = "".join([item.decode("ascii") for item in stdout_buf])
     if mixed_stderr:
-        return {"stdout": "".join(stdout_buf), "return_code": retcode}
+        print("*" * 80)
+        print(type(stdout_buf[0]))
+        return {"stdout": stdout_str, "return_code": retcode}
     else:
         return {
-            "stdout": "".join(stdout_buf),
-            "stderr": "".join(stderr_buf),
+            "stdout": stdout_str,
+            "stderr": "".join(stderr_buf.decode("ascii")),
             "return_code": retcode,
         }
 
@@ -93,6 +98,7 @@ def run_cmd(cmd, verbose=1, exception_on_error=1):
     Set verbose to 0 to stop logging messages.
     """
     log("Executing command :<%s>" % cmd)
+
     run_shell_command(
         cmd, mixed_stderr=1, verbose=verbose, exception_on_error=exception_on_error
     )

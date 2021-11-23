@@ -300,12 +300,18 @@ def do_setupdotpy_configure(flavor, platform):
         setup_configure += " --profile_log "
     if compiler_flags:
         setup_configure += ' --compiler-flags "' + compiler_flags + '"'
-    if not "key" in variants[flavor]:
-        setup_configure += ' --caps="' + variants[flavor]["capas"] + '"'
-        if "exe_capas" in variants[flavor]:
-            setup_configure += " --exe-caps " + variants[flavor]["exe_capas"]
-    else:
-        setup_configure += " --keydir " + key_dir + " --key " + variants[flavor]["key"]
+    print("*" * 80)
+    print(flavor)
+    print(variants)
+    for flav in flavor:
+        if not "key" in variants[flav]:
+            setup_configure += ' --caps="' + variants[flav]["capas"] + '"'
+            if "exe_capas" in variants[flav]:
+                setup_configure += " --exe-caps " + variants[flav]["exe_capas"]
+        else:
+            setup_configure += (
+                " --keydir " + key_dir + " --key " + variants[flav]["key"]
+            )
     if internal_proj:
         # Add the internal projects to the build
         setup_configure += " --internal-projects"
@@ -392,7 +398,7 @@ def init_args(params):
     build_profile = "integration"
 
     parser = OptionParser()
-    default_version_tag = "svn" + get_svn_revision()
+    default_version_tag = "deadbeef"  # "svn" + get_svn_revision()
     parser.add_option(
         "-p",
         "--profile_log",
@@ -405,7 +411,7 @@ def init_args(params):
         "-v",
         "--version",
         dest="version",
-        default="2.0.0",
+        default="3.8.2",
         help="Python release version [default: %default]",
     )
     parser.add_option(
@@ -553,7 +559,7 @@ def init_args(params):
     if options.flavors:
         gflavors = options.flavors.split(",")
     else:
-        gflavors = variants.keys()
+        gflavors = list(variants.keys())
     profiler = options.profiler
     compiler_flags = options.compiler_flags
     without_src_zip = options.without_src

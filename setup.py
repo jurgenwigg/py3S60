@@ -47,7 +47,7 @@ internal_proj = False
 pys60_magic_number = b"U\r\r\n"
 
 projects = [
-    {"name": "python25", "path": "newcore\\symbian\\group", "internal": False},
+    {"name": "python38", "path": "newcore\\symbian\\group", "internal": False},
     {"name": "testapp", "path": "ext\\test\\testapp\\group", "internal": False},
     {"name": "run_testapp", "path": "ext\\test\\run_testapp\\group", "internal": True},
     {
@@ -165,6 +165,15 @@ buildconfig_sdks = {
 allow_missing = 0
 
 BUILDCONFIG_FILE = os.path.join(topdir, "build.cfg")
+
+###############################################################################
+def execfile(file: str, global_vars=None, local_vars=None):
+    with open(file) as raw_file:
+        code = compile(raw_file.read(), file, "exec")
+        exec(code, global_vars, local_vars)
+
+
+###############################################################################
 
 
 def buildconfig_exists():
@@ -522,7 +531,7 @@ def cmd_generate_ensymble(params):
     ]
 
     # It is a prerequisite for ensymble to have python built for armv5
-    if not os.path.exists("\\epoc32\\release\\armv5\\urel\\python25.dll"):
+    if not os.path.exists("\\epoc32\\release\\armv5\\urel\\python38.dll"):
         raise RuntimeError("Python not built for ARMV5")
     for stub_dir in stub_dirs:
         run_in(stub_dir, "abld -keepgoing reallyclean armv5", ignore_errors=1)
@@ -916,7 +925,7 @@ def cmd_bdist_sis(params):
     group_dir = get_project_details("path")
     names = get_project_details("name")
     for x in group_dir:
-        if options.key == "pythonteam" and names[y] == "python25":
+        if options.key == "pythonteam" and names[y] == "python38":
             group_dir.remove(x)
             names.remove(names[y])
 
